@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+.env
+
+# IDE / notebooks
+.idea/
+.vscode/
+*.swp
+.ipynb_checkpoints/
+
+# Runtime data (SQLite caches, logs, exports)
+data/*
+!data/.gitkeep
+raw_data/*
+!raw_data/.gitkeep
+evaluation/data/merged_tll/*
+!evaluation/data/merged_tll/.gitkeep
+
+# Generated workflow / probe outputs
+**/competency_runs/*.json
+**/competency_runs/*.md
+!**/competency_runs/.gitignore
+**/workflow_runs/*.json
+!**/workflow_runs/.gitignore
+**/headless_runs/*.json
+**/headless_runs/*.md
+!**/headless_runs/.gitignore
+**/maps/*.html
+!**/maps/.gitignore
+**/probe_results*.json
+**/warm_option_catalog.discovered.json
+**/competency_eval_results.*
+**/competency_eval_run.log
+
+# OS
+.DS_Store
+Thumbs.db
