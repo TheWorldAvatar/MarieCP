@@ -1,0 +1,4 @@
+# Chemistry competency run recordings (gitignored)
+*.json
+*.md
+!.gitignore
