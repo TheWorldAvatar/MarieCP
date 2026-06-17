@@ -45,3 +45,7 @@ evaluation/data/merged_tll/*
 # OS
 .DS_Store
 Thumbs.db
+
+# Archives (use extracted source in repo instead)
+*.rar
+*.zip
