@@ -1,0 +1,232 @@
+{
+  "domain": "mof",
+  "atomics": [
+    {
+      "tool": "count_experimental_by_topology",
+      "domain": "mof",
+      "tier": "atomic",
+      "cached": true
+    },
+    {
+      "tool": "count_hypothetical_same_topology_as",
+      "domain": "mof",
+      "tier": "atomic",
+      "cached": true
+    },
+    {
+      "tool": "get_aqueous_low_temp_syntheses",
+      "domain": "mof",
+      "tier": "atomic",
+      "cached": true
+    },
+    {
+      "tool": "get_asa_by_mof_name",
+      "domain": "mof",
+      "tier": "atomic",
+      "cached": true
+    },
+    {
+      "tool": "get_high_binary_gas_uptake_mofs",
+      "domain": "mof",
+      "tier": "atomic",
+      "cached": true
+    },
+    {
+      "tool": "get_linkers_by_mof_name",
+      "domain": "mof",
+      "tier": "atomic",
+      "cached": true
+    },
+    {
+      "tool": "get_mof_identity_by_name",
+      "domain": "mof",
+      "tier": "atomic",
+      "cached": true
+    },
+    {
+      "tool": "get_mofs_by_gsa_min",
+      "domain": "mof",
+      "tier": "atomic",
+      "cached": true
+    },
+    {
+      "tool": "get_mofs_by_lcd_max",
+      "domain": "mof",
+      "tier": "atomic",
+      "cached": true
+    },
+    {
+      "tool": "get_mofs_by_metal",
+      "domain": "mof",
+      "tier": "atomic",
+      "cached": true
+    },
+    {
+      "tool": "get_mofs_by_metal_and_linker",
+      "domain": "mof",
+      "tier": "atomic",
+      "cached": true
+    },
+    {
+      "tool": "get_mofs_by_topology_all_sources",
+      "domain": "mof",
+      "tier": "atomic",
+      "cached": true
+    },
+    {
+      "tool": "get_mofs_with_same_topology_as",
+      "domain": "mof",
+      "tier": "atomic",
+      "cached": true
+    },
+    {
+      "tool": "get_pld_stats_by_mof_name",
+      "domain": "mof",
+      "tier": "atomic",
+      "cached": true
+    },
+    {
+      "tool": "get_pore_metrics_by_mof_name",
+      "domain": "mof",
+      "tier": "atomic",
+      "cached": true
+    },
+    {
+      "tool": "get_publications_by_mof_name",
+      "domain": "mof",
+      "tier": "atomic",
+      "cached": true
+    },
+    {
+      "tool": "get_refcodes_by_mof_name",
+      "domain": "mof",
+      "tier": "atomic",
+      "cached": true
+    },
+    {
+      "tool": "get_synthesis_by_mof_name",
+      "domain": "mof",
+      "tier": "atomic",
+      "cached": true
+    },
+    {
+      "tool": "get_thermal_stable_mofs",
+      "domain": "mof",
+      "tier": "atomic",
+      "cached": true
+    },
+    {
+      "tool": "get_top_synthesis_solvents",
+      "domain": "mof",
+      "tier": "atomic",
+      "cached": true
+    },
+    {
+      "tool": "get_water_stable_mofs",
+      "domain": "mof",
+      "tier": "atomic",
+      "cached": true
+    }
+  ],
+  "facets": [
+    {
+      "id": "facet_identity",
+      "keys": [
+        "name_lc"
+      ],
+      "columns": [
+        "name",
+        "topology",
+        "sourcedb",
+        "refcode",
+        "mofid"
+      ]
+    },
+    {
+      "id": "facet_topology_mof",
+      "keys": [
+        "topology"
+      ],
+      "columns": [
+        "mof",
+        "name",
+        "topology",
+        "sourcedb"
+      ]
+    },
+    {
+      "id": "facet_synthesis",
+      "keys": [
+        "name_lc",
+        "refcode"
+      ],
+      "columns": [
+        "name",
+        "refcode",
+        "method",
+        "solvent"
+      ]
+    },
+    {
+      "id": "facet_metal_source",
+      "keys": [
+        "metal"
+      ],
+      "columns": [
+        "sourcedb",
+        "count"
+      ]
+    },
+    {
+      "id": "facet_linker",
+      "keys": [
+        "name_lc"
+      ],
+      "columns": [
+        "name",
+        "linker"
+      ]
+    },
+    {
+      "id": "facet_refcodes",
+      "keys": [
+        "name_lc"
+      ],
+      "columns": [
+        "name",
+        "refcode",
+        "sourcedb"
+      ]
+    }
+  ],
+  "transforms": [
+    {
+      "id": "filter_rows",
+      "kind": "row_algebra",
+      "sparql_fragment": "FILTER on bound vars (single pool)"
+    },
+    {
+      "id": "join_rows",
+      "kind": "row_algebra",
+      "sparql_fragment": "join two pools on key(s)"
+    },
+    {
+      "id": "group_aggregate",
+      "kind": "row_algebra",
+      "sparql_fragment": "GROUP BY + aggregates"
+    },
+    {
+      "id": "top_n_by_field",
+      "kind": "row_algebra",
+      "sparql_fragment": "ORDER BY + LIMIT"
+    }
+  ],
+  "residual_tool": "residual_sparql",
+  "workflow_atomic_specs_count": 31,
+  "workflow_residual_queries": [
+    {
+      "workflow_id": "CQ02C_ZN_CORE_GROUP_RESIDUAL",
+      "query_preview": "PREFIX mofs: <https://www.theworldavatar.com/kg/ontomofs_vkg/>\nSELECT (COUNT(DISTINCT ?mof) AS ?count) WHERE { ?mof a mo"
+    }
+  ]
+}

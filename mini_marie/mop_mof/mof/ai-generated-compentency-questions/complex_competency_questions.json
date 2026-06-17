@@ -1,0 +1,247 @@
+[
+  {
+    "id": "CQ01",
+    "category": "topology_chain",
+    "question": "What is the dominant Tobassco topology, which MOF leads that class for CO2 uptake, and what full properties are recorded for that leader?",
+    "steps": [
+      {
+        "tool": "get_tobassco_topology_counts",
+        "extract": {
+          "dominant_topology": {"index": 0, "field": "topology"}
+        }
+      },
+      {
+        "tool": "get_tobassco_mofs_by_topology",
+        "args": {"topology": "$dominant_topology"},
+        "extract": {
+          "leader_mofid_suffix": {"index": 0, "field": "mofid", "transform": "mofid_suffix"}
+        }
+      },
+      {
+        "tool": "get_mof_properties_by_mofid_fragment",
+        "args": {"mofid_fragment": "$leader_mofid_suffix"},
+        "extract": {
+          "_property_rows": {"index": 0, "field": "p"}
+        }
+      },
+      {
+        "type": "aggregate",
+        "name": "property_highlights",
+        "aggregate_type": "property_highlights"
+      }
+    ],
+    "final_summary": "Dominant topology is $dominant_topology; leader suffix $leader_mofid_suffix."
+  },
+  {
+    "id": "CQ02",
+    "category": "screening_chain",
+    "question": "From the top large-pore CO2 candidate, compare it against the dominant Tobassco topology class and summarize both the seed and branch leaders.",
+    "steps": [
+      {
+        "tool": "get_large_pore_co2_candidates",
+        "extract": {
+          "seed_top_co2": {"index": 0, "field": "co2_uptake"},
+          "seed_mofid_suffix": {"index": 0, "field": "mofid", "transform": "mofid_suffix"}
+        }
+      },
+      {
+        "tool": "get_tobassco_topology_counts",
+        "extract": {
+          "branch_topology": {"index": 0, "field": "topology"}
+        }
+      },
+      {
+        "tool": "get_tobassco_mofs_by_topology",
+        "args": {"topology": "$branch_topology"},
+        "extract": {
+          "branch_top_co2": {"index": 0, "field": "co2_uptake"}
+        }
+      },
+      {
+        "type": "aggregate",
+        "name": "topology_branch_summary",
+        "aggregate_type": "topology_branch_summary"
+      }
+    ],
+    "final_summary": "Large-pore seed $seed_mofid_suffix ($seed_top_co2 mmol/g) vs dominant topology `$branch_topology` leader ($branch_top_co2 mmol/g)."
+  },
+  {
+    "id": "CQ03",
+    "category": "corpus_chain",
+    "question": "What fraction of the entire TWA is covered by Tobassco MOFs with CO2 uptake labels, and what are the Tobassco uptake statistics?",
+    "steps": [
+      {
+        "tool": "get_mof_total_count",
+        "extract": {
+          "total_mofs": {"index": 0, "field": "count"}
+        }
+      },
+      {
+        "tool": "get_tobassco_co2_coverage",
+        "extract": {
+          "tobassco_with_co2": {"index": 0, "field": "with_co2"}
+        }
+      },
+      {
+        "tool": "get_tobassco_co2_uptake_stats"
+      },
+      {
+        "type": "aggregate",
+        "name": "tobassco_co2_share",
+        "aggregate_type": "tobassco_co2_share"
+      }
+    ]
+  },
+  {
+    "id": "CQ04",
+    "category": "corpus_chain",
+    "question": "Which is the second-largest MOF source database, and what do its top entries look like?",
+    "steps": [
+      {
+        "tool": "get_source_database_stats",
+        "extract": {
+          "second_source_db": {"index": 1, "field": "db"},
+          "second_source_count": {"index": 1, "field": "count"}
+        }
+      },
+      {
+        "tool": "get_mofs_by_sourcedb",
+        "args": {"source_db": "$second_source_db"}
+      }
+    ],
+    "final_summary": "Second-largest source is $second_source_db with $second_source_count MOFs."
+  },
+  {
+    "id": "CQ05",
+    "category": "chemistry_chain",
+    "question": "Among zinc paddlewheel Tobassco MOFs, find one with valid pore geometry, cross-check it by MOFid lookup, then pull its full property sheet.",
+    "steps": [
+      {
+        "tool": "get_tobassco_mofs_by_metal_node",
+        "args": {"metal_smiles": "[Zn][Zn]"},
+        "extract": {
+          "zn_mofid_suffix": {
+            "pick": "first_valid_pld_row",
+            "field": "mofid",
+            "transform": "mofid_suffix"
+          }
+        }
+      },
+      {
+        "tool": "lookup_mof_by_mofid_fragment",
+        "args": {"mofid_fragment": "$zn_mofid_suffix"}
+      },
+      {
+        "tool": "get_mof_properties_by_mofid_fragment",
+        "args": {"mofid_fragment": "$zn_mofid_suffix"},
+        "extract": {
+          "_property_rows": {"index": 0, "field": "p"}
+        }
+      },
+      {
+        "type": "aggregate",
+        "name": "property_highlights",
+        "aggregate_type": "property_highlights"
+      }
+    ],
+    "final_summary": "Validated zinc paddlewheel candidate: $zn_mofid_suffix."
+  },
+  {
+    "id": "CQ06",
+    "category": "co2_chain",
+    "question": "Compare raw CO2 rankings against valid-geometry and large-pore realistic rankings to show when the 363 mmol/g cap dominates.",
+    "steps": [
+      {
+        "tool": "get_top_tobassco_co2_uptake",
+        "extract": {
+          "raw_top_co2": {"index": 0, "field": "co2_uptake"}
+        }
+      },
+      {
+        "tool": "get_top_tobassco_co2_valid_pore_geometry",
+        "extract": {
+          "valid_geom_top_co2": {"index": 0, "field": "co2_uptake"}
+        }
+      },
+      {
+        "tool": "get_large_pore_co2_candidates",
+        "extract": {
+          "realistic_top_co2": {"index": 0, "field": "co2_uptake"}
+        }
+      },
+      {
+        "type": "aggregate",
+        "name": "co2_ranking_comparison",
+        "aggregate_type": "co2_ranking_comparison"
+      }
+    ]
+  },
+  {
+    "id": "CQ07",
+    "category": "lookup_chain",
+    "question": "Find MOFs whose MOFid contains [Zn][O]([Zn]), pick the best-valid-geometry match, and retrieve its recorded properties.",
+    "steps": [
+      {
+        "tool": "lookup_mof_by_mofid_fragment",
+        "args": {"mofid_fragment": "[Zn][O]([Zn])"},
+        "extract": {
+          "zn_o_zn_suffix": {
+            "pick": "first_valid_pld_row",
+            "field": "mofid",
+            "transform": "mofid_suffix"
+          }
+        }
+      },
+      {
+        "tool": "get_mof_properties_by_mofid_fragment",
+        "args": {"mofid_fragment": "$zn_o_zn_suffix"},
+        "extract": {
+          "_property_rows": {"index": 0, "field": "p"}
+        }
+      },
+      {
+        "type": "aggregate",
+        "name": "property_highlights",
+        "aggregate_type": "property_highlights"
+      }
+    ],
+    "final_summary": "Best valid-geometry [Zn][O]([Zn]) match: $zn_o_zn_suffix."
+  },
+  {
+    "id": "CQ08",
+    "category": "topology_chain",
+    "question": "For the second-most common Tobassco topology, list top CO2 performers and verify one candidate via MOFid property lookup.",
+    "steps": [
+      {
+        "tool": "get_tobassco_topology_counts",
+        "extract": {
+          "second_topology": {"index": 1, "field": "topology"}
+        }
+      },
+      {
+        "tool": "get_tobassco_mofs_by_topology",
+        "args": {"topology": "$second_topology"},
+        "extract": {
+          "nbo_leader_suffix": {
+            "pick": "first_valid_pld_row",
+            "field": "mofid",
+            "transform": "mofid_suffix"
+          }
+        }
+      },
+      {
+        "tool": "get_mof_properties_by_mofid_fragment",
+        "args": {"mofid_fragment": "$nbo_leader_suffix"},
+        "extract": {
+          "_property_rows": {"index": 0, "field": "p"}
+        }
+      },
+      {
+        "type": "aggregate",
+        "name": "property_highlights",
+        "aggregate_type": "property_highlights"
+      }
+    ],
+    "final_summary": "Second topology is $second_topology; verified candidate $nbo_leader_suffix."
+  }
+]

@@ -1,0 +1,122 @@
+[
+  {
+    "id": "Q01",
+    "category": "corpus",
+    "question": "How many Metal-Organic Frameworks are in the OntoMOFs TWA?",
+    "tool": "get_mof_total_count",
+    "args": {},
+    "grading": "numeric_count"
+  },
+  {
+    "id": "Q02",
+    "category": "corpus",
+    "question": "Which source databases contribute MOFs, and how many MOFs does each contain?",
+    "tool": "get_source_database_stats",
+    "args": {},
+    "grading": "ranked_list"
+  },
+  {
+    "id": "Q03",
+    "category": "co2",
+    "question": "How many Tobassco MOFs have predicted CO2 uptake at 15 bar and 298 K?",
+    "tool": "get_tobassco_co2_coverage",
+    "args": {},
+    "grading": "numeric_count"
+  },
+  {
+    "id": "Q04",
+    "category": "co2",
+    "question": "What are the average, minimum, and maximum predicted CO2 uptake values (mmol/g) for Tobassco MOFs at 15 bar and 298 K?",
+    "tool": "get_tobassco_co2_uptake_stats",
+    "args": {},
+    "grading": "aggregate_stats"
+  },
+  {
+    "id": "Q05",
+    "category": "co2",
+    "question": "Which Tobassco MOFs have the highest predicted CO2 uptake at 15 bar and 298 K?",
+    "tool": "get_top_tobassco_co2_uptake",
+    "args": {},
+    "grading": "ranked_list"
+  },
+  {
+    "id": "Q06",
+    "category": "co2",
+    "question": "Which Tobassco MOFs rank highest for CO2 uptake when only MOFs with valid pore geometry (PLD > 0 and LCD > 0) are considered?",
+    "tool": "get_top_tobassco_co2_valid_pore_geometry",
+    "args": {},
+    "grading": "ranked_list"
+  },
+  {
+    "id": "Q07",
+    "category": "co2",
+    "question": "Which Tobassco MOFs combine large pores (PLD >= 10 A) with high but sub-cap CO2 uptake (< 300 mmol/g)?",
+    "tool": "get_large_pore_co2_candidates",
+    "args": {},
+    "grading": "ranked_list"
+  },
+  {
+    "id": "Q08",
+    "category": "topology",
+    "question": "What are the most common RCSR topology symbols among Tobassco MOFs?",
+    "tool": "get_tobassco_topology_counts",
+    "args": {},
+    "grading": "ranked_list"
+  },
+  {
+    "id": "Q09",
+    "category": "topology",
+    "question": "What are the top Tobassco MOFs with pcu topology by predicted CO2 uptake?",
+    "tool": "get_tobassco_mofs_by_topology",
+    "args": {"topology": "pcu"},
+    "grading": "ranked_list"
+  },
+  {
+    "id": "Q10",
+    "category": "topology",
+    "question": "What are the top Tobassco MOFs with nbo topology by predicted CO2 uptake?",
+    "tool": "get_tobassco_mofs_by_topology",
+    "args": {"topology": "nbo"},
+    "grading": "ranked_list"
+  },
+  {
+    "id": "Q11",
+    "category": "chemistry",
+    "question": "Which Tobassco MOFs contain a zinc paddlewheel metal node ([Zn][Zn]) and have the highest CO2 uptake?",
+    "tool": "get_tobassco_mofs_by_metal_node",
+    "args": {"metal_smiles": "[Zn][Zn]"},
+    "grading": "ranked_list"
+  },
+  {
+    "id": "Q12",
+    "category": "corpus",
+    "question": "What are the top MOFs from the QMOF_2025 source database?",
+    "tool": "get_mofs_by_sourcedb",
+    "args": {"source_db": "QMOF_2025"},
+    "grading": "ranked_list"
+  },
+  {
+    "id": "Q13",
+    "category": "lookup",
+    "question": "Find MOFs whose MOFid-v1 contains the fragment [Zn][O]([Zn]).",
+    "tool": "lookup_mof_by_mofid_fragment",
+    "args": {"mofid_fragment": "[Zn][O]([Zn])"},
+    "grading": "lookup_hits"
+  },
+  {
+    "id": "Q14",
+    "category": "lookup",
+    "question": "What properties are recorded for a MOF whose MOFid-v1 contains 'MOFid-v1.pcu.cat0'?",
+    "tool": "get_mof_properties_by_mofid_fragment",
+    "args": {"mofid_fragment": "MOFid-v1.pcu.cat0"},
+    "grading": "property_list"
+  },
+  {
+    "id": "Q15",
+    "category": "corpus",
+    "question": "What are the top MOFs from the CoRE MOF 2019 source database?",
+    "tool": "get_mofs_by_sourcedb",
+    "args": {"source_db": "CoRE MOF 2019"},
+    "grading": "ranked_list"
+  }
+]
