@@ -1,0 +1,18 @@
+[Unit]
+Description=MarieCP TWA demo API (Marie + Zaha + hub)
+After=network.target
+
+[Service]
+User=xz378
+WorkingDirectory=/home/xz378/mariecp
+Environment=PYTHONPATH=/home/xz378/mariecp
+EnvironmentFile=/home/xz378/mariecp/.env
+ExecStart=/home/xz378/mariecp/.venv/bin/gunicorn \
+  -w 2 -b 127.0.0.1:8080 --timeout 300 \
+  --access-logfile - --error-logfile - \
+  demos.server:app
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
