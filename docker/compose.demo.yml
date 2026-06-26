@@ -16,7 +16,7 @@ services:
     container_name: mariecp-demo
     restart: unless-stopped
     ports:
-      - "${MARIECP_BIND:-127.0.0.1:8080}:8080"
+      - "${MARIECP_PUBLISH_HOST:-0.0.0.0}:${MARIECP_PORT:-3001}:8080"
     environment:
       PYTHONPATH: /app
       DEMO_CONFIG: docker

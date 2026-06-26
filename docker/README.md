@@ -2,13 +2,14 @@
 
 Public demo API + static UIs (Marie classic, Zaha, hub) in an **isolated** Compose project.
 
+**Default publish:** `0.0.0.0:3001` → container `:8080` (external access on host port 3001).
+
 ## Local test
 
 **PowerShell (Windows):**
 
 ```powershell
 .\demos\run_docker_smoke.ps1
-# optional cache path:
 .\demos\run_docker_smoke.ps1 -DataDir "D:\mini_marie_data\data"
 ```
 
@@ -18,9 +19,9 @@ Public demo API + static UIs (Marie classic, Zaha, hub) in an **isolated** Compo
 MARIECP_DATA=D:/mini_marie_data/data bash docker/run_demo_smoke.sh
 ```
 
-Then open http://127.0.0.1:8080/demos/hub/
+Then open http://127.0.0.1:3001/demos/hub/
 
-Stop **only this stack** (does not affect other compose projects):
+Stop **only this stack**:
 
 ```bash
 docker compose -f docker/compose.demo.yml -p mariecp-demo down
@@ -30,9 +31,16 @@ docker compose -f docker/compose.demo.yml -p mariecp-demo down
 
 ```bash
 export MARIECP_DATA=/path/to/mini_marie_data/data
-export MARIECP_BIND=127.0.0.1:8080
+export MARIECP_PORT=3001
+export MARIECP_PUBLISH_HOST=0.0.0.0
 docker compose -f docker/compose.demo.yml -p mariecp-demo up --build -d
-curl http://127.0.0.1:8080/health
+curl http://127.0.0.1:3001/health
+```
+
+Loopback-only (no external bind):
+
+```bash
+MARIECP_PUBLISH_HOST=127.0.0.1 MARIECP_PORT=8080 docker compose -f docker/compose.demo.yml -p mariecp-demo up -d
 ```
 
 ## Production (zaha-01)
@@ -42,7 +50,7 @@ cd ~/mariecp && git pull
 bash deploy/zaha-01/install.sh
 ```
 
-See [../deploy/zaha-01/README.md](../deploy/zaha-01/README.md).
+nginx upstream: `127.0.0.1:3001` (see `deploy/zaha-01/nginx-mariecp-demo.conf`).
 
 ## Design
 
@@ -52,7 +60,8 @@ See [../deploy/zaha-01/README.md](../deploy/zaha-01/README.md).
 | Compose file | `docker/compose.demo.yml` |
 | Project name | `mariecp-demo` (isolated) |
 | Cache mount | `MARIECP_DATA` → `/data` in container |
-| Published port | `127.0.0.1:8080` (loopback) |
+| Host port | `MARIECP_PORT` (default **3001**) |
+| Bind address | `MARIECP_PUBLISH_HOST` (default **0.0.0.0**) |
 | Config | `configs/demo_docker.env` + `.env` secrets |
 
 Does **not** run `docker compose down` without `-p mariecp-demo`, does not prune, does not restart unrelated containers.

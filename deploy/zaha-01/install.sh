@@ -3,16 +3,16 @@
 #
 # Safe alongside other Docker stacks:
 #   - project name: mariecp-demo (never touches other compose projects)
-#   - binds 127.0.0.1:8080 only
+#   - publishes 0.0.0.0:3001 -> container :8080 (external access)
 #   - no apt, no system Python, no nginx reload
 #
 # Usage:
 #   bash deploy/zaha-01/install.sh
-#   INSTALL_COMPOSE=1 bash deploy/zaha-01/install.sh   # same (default)
 #
 # Optional:
 #   MARIECP_DATA=/home/xz378/mini_marie_data/data
-#   MARIECP_PORT=8080
+#   MARIECP_PORT=3001
+#   MARIECP_PUBLISH_HOST=0.0.0.0
 #   SKIP_BUILD=1
 #
 set -euo pipefail
@@ -21,13 +21,14 @@ REPO_DIR="${MARIECP_DIR:-/home/xz378/mariecp}"
 REPO_URL="${MARIECP_REPO:-https://github.com/TheWorldAvatar/MarieCP.git}"
 BRANCH="${MARIECP_BRANCH:-main}"
 DATA_DIR="${MARIECP_DATA:-${MINI_MARIE_DATA_DIR:-/home/xz378/mini_marie_data/data}}"
-BIND_PORT="${MARIECP_PORT:-8080}"
+BIND_PORT="${MARIECP_PORT:-3001}"
+PUBLISH_HOST="${MARIECP_PUBLISH_HOST:-0.0.0.0}"
 COMPOSE=(docker compose --env-file configs/demo_docker.env -f docker/compose.demo.yml -p mariecp-demo)
 
 echo "==> MarieCP demo install (Docker)"
 echo "    repo:    ${REPO_DIR} (${BRANCH})"
 echo "    caches:  ${DATA_DIR}/mini_marie_cache"
-echo "    publish: 127.0.0.1:${BIND_PORT} -> container :8080"
+echo "    publish: ${PUBLISH_HOST}:${BIND_PORT} -> container :8080"
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "ERROR: docker not found" >&2
@@ -84,7 +85,8 @@ if [[ "${missing}" -eq 1 ]]; then
 fi
 
 export MARIECP_DATA="${DATA_DIR}"
-export MARIECP_BIND="127.0.0.1:${BIND_PORT}"
+export MARIECP_PORT="${BIND_PORT}"
+export MARIECP_PUBLISH_HOST="${PUBLISH_HOST}"
 
 if [[ "${SKIP_BUILD:-0}" != "1" ]]; then
   echo "==> docker compose build (project mariecp-demo only)"

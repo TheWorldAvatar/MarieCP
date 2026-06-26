@@ -11,7 +11,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
 
 COMPOSE=(docker compose --env-file configs/demo_docker.env -f docker/compose.demo.yml -p mariecp-demo)
-PORT="${MARIECP_PORT:-8080}"
+PORT="${MARIECP_PORT:-3001}"
+PUBLISH_HOST="${MARIECP_PUBLISH_HOST:-0.0.0.0}"
 DATA="${MARIECP_DATA:-}"
 
 if [[ -z "${DATA}" ]]; then
@@ -33,8 +34,10 @@ if [[ -z "${DATA}" ]]; then
 fi
 
 export MARIECP_DATA="${DATA}"
-export MARIECP_BIND="127.0.0.1:${PORT}"
+export MARIECP_PORT="${PORT}"
+export MARIECP_PUBLISH_HOST="${PUBLISH_HOST}"
 
+echo "==> Publish: ${PUBLISH_HOST}:${PORT} -> container :8080"
 echo "==> Cache mount: ${MARIECP_DATA} -> /data"
 echo "==> Building image"
 "${COMPOSE[@]}" build

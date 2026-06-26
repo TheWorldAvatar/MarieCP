@@ -5,7 +5,7 @@ Target: **Docker Compose** on zaha-01, public URLs on **www.theworldavatar.io**.
 ## Isolation (safe with existing Docker stacks)
 
 - Compose **project name**: `mariecp-demo` — only this stack is built/started/restarted
-- Publishes **127.0.0.1:8080** (loopback; nginx proxies public traffic)
+- Publishes **0.0.0.0:3001** (external on host; nginx proxies via `127.0.0.1:3001`)
 - No `apt`, no system Python venv/conda, **no nginx reload** in install script
 - Never runs `docker compose down` without `-p mariecp-demo`
 
@@ -41,11 +41,11 @@ docker compose -f docker/compose.demo.yml -p mariecp-demo up -d --build
 
 ## 3. nginx (www.theworldavatar.io)
 
-Merge `nginx-mariecp-demo.conf` into the site config (upstream `127.0.0.1:8080`).
+Merge `nginx-mariecp-demo.conf` into the site config (upstream `127.0.0.1:3001`).
 
 ```bash
-curl -s http://127.0.0.1:8080/health
-curl -s http://127.0.0.1:8080/health/cache | python3 -m json.tool
+curl -s http://127.0.0.1:3001/health
+curl -s http://127.0.0.1:3001/health/cache | python3 -m json.tool
 ```
 
 ## 4. Upgrade

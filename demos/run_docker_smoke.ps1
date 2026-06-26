@@ -5,7 +5,8 @@
 
 param(
     [string]$DataDir = "",
-    [int]$Port = 8080,
+    [int]$Port = 3001,
+    [string]$PublishHost = "0.0.0.0",
     [switch]$Down
 )
 
@@ -34,9 +35,10 @@ if (-not $DataDir) {
 }
 
 $env:MARIECP_DATA = $DataDir
-$env:MARIECP_BIND = "127.0.0.1:$Port"
 $env:MARIECP_PORT = "$Port"
+$env:MARIECP_PUBLISH_HOST = $PublishHost
 
+Write-Host "==> Publish: ${PublishHost}:${Port} -> container :8080"
 Write-Host "==> Cache mount: $DataDir -> /data"
 Write-Host "==> docker compose build"
 docker @Compose build
@@ -75,6 +77,12 @@ if (Test-Path $cacheDb) {
 
 Write-Host "==> HTTP hub check"
 (Invoke-WebRequest -Uri "http://127.0.0.1:${Port}/demos/hub/" -UseBasicParsing).StatusCode
+
+$lanIp = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -match '^192\.|^10\.' } | Select-Object -First 1).IPAddress
+if ($lanIp -and $PublishHost -eq "0.0.0.0") {
+    Write-Host "==> External bind check on ${lanIp}:${Port}"
+    (Invoke-WebRequest -Uri "http://${lanIp}:${Port}/health" -UseBasicParsing).StatusCode
+}
 
 Write-Host ""
 Write-Host "Docker smoke passed. Stack still up on http://127.0.0.1:${Port}/"
