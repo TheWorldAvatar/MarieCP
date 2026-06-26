@@ -44,7 +44,8 @@ evaluation/data/merged_tll/*
 **/competency_eval_run.log
 
 # Demo audit / analysis outputs
-demos/audit_runs/
+demos/audit_runs/*
+!demos/audit_runs/.gitignore
 data/demo_analysis.json
 
 # Test / tooling caches
