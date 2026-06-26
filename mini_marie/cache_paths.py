@@ -5,6 +5,27 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+_repo_env_loaded = False
+
+
+def load_repo_env() -> None:
+    """Load repo ``.env`` and ``configs/demo_<DEMO_CONFIG>.env`` (default ``demo_local``)."""
+    global _repo_env_loaded
+    if _repo_env_loaded:
+        return
+    try:
+        from dotenv import load_dotenv
+
+        root = repo_root()
+        load_dotenv(root / ".env", override=True)
+        demo_name = os.environ.get("DEMO_CONFIG", "demo_local").strip() or "demo_local"
+        demo_env = root / "configs" / f"{demo_name}.env"
+        if demo_env.is_file():
+            load_dotenv(demo_env, override=True)
+    except ImportError:
+        pass
+    _repo_env_loaded = True
+
 
 def repo_root() -> Path:
     """Project root (parent of the ``mini_marie`` Python package). Same path for dev and deploy."""
@@ -24,11 +45,28 @@ def merged_tll_dir() -> Path:
     return repo_root() / "evaluation" / "data" / "merged_tll"
 
 
+def _normalize_data_path(path: Path) -> Path:
+    """Map Windows drive paths (D:/...) to WSL /mnt/d/... when running under Linux."""
+    raw = str(path)
+    if os.name != "posix" or not raw:
+        return path
+    if len(raw) >= 3 and raw[1] == ":" and raw[0].isalpha():
+        letter = raw[0].lower()
+        rest = raw[2:].lstrip("\\/")
+        wsl = Path(f"/mnt/{letter}") / rest.replace("\\", "/")
+        if wsl.exists() or wsl.parent.exists():
+            return wsl
+    return path
+
+
 def data_dir() -> Path:
     """Persistent data root; override with MINI_MARIE_DATA_DIR in Docker."""
     override = os.environ.get("MINI_MARIE_DATA_DIR", "").strip()
+    if not override:
+        load_repo_env()
+        override = os.environ.get("MINI_MARIE_DATA_DIR", "").strip()
     if override:
-        path = Path(override)
+        path = _normalize_data_path(Path(override))
     else:
         path = repo_root() / "data"
     path.mkdir(parents=True, exist_ok=True)
