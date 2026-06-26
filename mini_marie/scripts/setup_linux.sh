@@ -19,9 +19,48 @@ fi
 PY_VER="$("${PYTHON}" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
 echo "==> Using Python ${PY_VER}"
 
-if [[ ! -d "${VENV_DIR}" ]]; then
+venv_ok() {
+  [[ -x "${VENV_DIR}/bin/python" ]] && "${VENV_DIR}/bin/python" -m pip --version >/dev/null 2>&1
+}
+
+create_venv() {
   echo "==> Creating virtualenv at ${VENV_DIR}"
-  "${PYTHON}" -m venv "${VENV_DIR}"
+  if "${PYTHON}" -m venv "${VENV_DIR}" 2>/dev/null && venv_ok; then
+    return 0
+  fi
+  rm -rf "${VENV_DIR}"
+  echo "==> venv module unavailable; trying virtualenv package"
+  if ! "${PYTHON}" -m pip --version >/dev/null 2>&1; then
+    echo "ERROR: pip not found for ${PYTHON}. Install python3-pip or python${PY_VER}-venv." >&2
+    return 1
+  fi
+  "${PYTHON}" -m pip install --user virtualenv
+  "${PYTHON}" -m virtualenv "${VENV_DIR}"
+  venv_ok
+}
+
+if [[ -n "${VIRTUAL_ENV:-}" && "${VIRTUAL_ENV}" == "${VENV_DIR}" ]] && venv_ok; then
+  echo "==> Using active virtualenv ${VENV_DIR}"
+elif venv_ok; then
+  echo "==> Reusing existing virtualenv ${VENV_DIR}"
+else
+  rm -rf "${VENV_DIR}"
+  if ! create_venv; then
+    cat >&2 <<EOF
+ERROR: Could not create a Python virtualenv at ${VENV_DIR}.
+
+On Debian/Ubuntu (safe; does not affect Docker):
+  sudo apt install -y python${PY_VER}-venv python3-pip
+  rm -rf ${VENV_DIR}
+  bash mini_marie/scripts/setup_linux.sh
+
+Or reuse an existing env:
+  python3 -m venv ${VENV_DIR}   # after apt install
+  source ${VENV_DIR}/bin/activate
+  INSTALL_KGQA=1 bash mini_marie/scripts/setup_linux.sh
+EOF
+    exit 1
+  fi
 fi
 # shellcheck disable=SC1091
 source "${VENV_DIR}/bin/activate"

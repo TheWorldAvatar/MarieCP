@@ -38,11 +38,18 @@ bash deploy/zaha-01/upload_caches.sh
 
 ## 2. Install app (on zaha-01)
 
+Debian/Ubuntu needs the venv OS package once (does not touch Docker):
+
+```bash
+sudo apt install -y python3.10-venv python3-pip
+```
+
 ```bash
 ssh xz378@zaha-01
 git clone https://github.com/TheWorldAvatar/MarieCP.git ~/mariecp   # first time only
 cd ~/mariecp
 git pull
+rm -rf .venv   # if a previous venv create failed halfway
 bash deploy/zaha-01/install.sh
 ```
 
