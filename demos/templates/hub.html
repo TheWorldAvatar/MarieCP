@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <title>The World Avatar — Demo assistants</title>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description"
+        content="Choose a World Avatar question-answering assistant: Marie (chemistry) or Zaha (urban data)." />
+    <link rel="icon" type="image/png" href="/demos/hub/favicon.png" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css"
+        integrity="sha384-xOolHFLEh07PJGoPkLv1IbcEPTNtaed2xpHsD9ESMhqIYd0nLMwNLD69Npy4HI+N" crossorigin="anonymous">
+    <link rel="stylesheet" href="/demos/zaha/static/css/spectre.min.css">
+    <link rel="stylesheet" href="/demos/zaha/static/css/theme.min.css">
+    <link rel="stylesheet" href="/demos/zaha/static/css/custom.css">
+    <link rel="stylesheet" href="/demos/zaha/static/css/styles.css">
+    <link rel="stylesheet" href="/demos/hub/hub.css" />
+</head>
+
+<body id="top" class="header-fixed header-animated sticky-footer">
+    {% include "_twa_header.html" %}
+
+    <main id="body-wrapper">
+        <div class="container grid-lg">
+            <section class="intro-container three-quarter-width hub-page-intro">
+                <div class="intro-center" style="width: 100%; text-align: center;">
+                    <h2>The World Avatar demos</h2>
+                    <p>Natural-language access to knowledge graphs — pick an assistant to explore chemistry or urban
+                        data.</p>
+                </div>
+            </section>
+
+            <section class="intro-container three-quarter-width hub-assistant">
+                <div class="intro-left">
+                    <figure class="hub-portrait"
+                        data-bio="Marie Curie (1867-1934) was a Polish and naturalised-French physicist and chemist. She pioneered research on radioactivity and won Nobel Prizes in Physics and Chemistry.">
+                        <img src="/demos/hub/portraits/marie.png" alt="Marie Curie" />
+                    </figure>
+                </div>
+                <div class="intro-center">
+                    <h2>Marie</h2>
+                    <p>Marie answers questions over chemistry knowledge graphs — species and thermophysical properties,
+                        zeolites, reaction mechanisms, metal–organic polyhedra, and more.</p>
+                    <p>Powered by multi-domain KGQA with online probes and full-scale offline replay over warmed local
+                        caches.</p>
+                    <p><a class="btn btn-primary hub-open-btn" href="/demos/marie-classic/">Open Marie</a>
+                        <span style="font-size: 0.9rem; margin-left: 0.5rem;">(<a href="/demos/marie">advanced UI</a>)</span></p>
+                </div>
+            </section>
+
+            <section class="intro-container three-quarter-width hub-assistant">
+                <div class="intro-left">
+                    <figure class="hub-portrait"
+                        data-bio="Dame Zaha Hadid (1950-2016) was an Iraqi-British architect, artist, and designer, recognised as a key figure in late-20th and early-21st century architecture.">
+                        <img src="/demos/zaha/static/img/zaha.png" alt="Zaha Hadid" />
+                    </figure>
+                </div>
+                <div class="intro-center">
+                    <h2>Zaha</h2>
+                    <p>Zaha is a proof-of-concept search engine for urban data in The World Avatar — buildings, land
+                        use, zoning, and property questions over city knowledge graphs.</p>
+                    <p>Try sample questions or type your own; answers appear as tables, maps, and chatbot narrative.</p>
+                    <p><a class="btn btn-primary hub-open-btn" href="{{ zaha_url }}">Open Zaha</a></p>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    {% include "_twa_footer.html" %}
+</body>
+
+</html>

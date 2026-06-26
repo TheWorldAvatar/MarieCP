@@ -1,0 +1,90 @@
+/* Hub tweaks on top of Zaha/Marie TWA styles (custom.css, spectre). */
+
+.hub-page-intro {
+  margin-bottom: 1rem;
+}
+
+.hub-page-intro p {
+  font-size: 12pt;
+  max-width: 52rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.hub-assistant {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #dcdcdc;
+}
+
+.hub-assistant:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.hub-portrait {
+  position: relative;
+  width: 175px;
+  height: 250px;
+  margin: 0;
+}
+
+.hub-portrait img {
+  width: 175px;
+  height: 250px;
+  object-fit: cover;
+  box-shadow: none;
+}
+
+.hub-portrait img:hover {
+  box-shadow: none;
+}
+
+.hub-portrait::after {
+  content: attr(data-bio);
+  position: absolute;
+  left: 50%;
+  bottom: 0.75rem;
+  z-index: 2;
+  width: 15rem;
+  max-width: calc(100vw - 2rem);
+  padding: 0.75rem 0.85rem;
+  border-radius: 0.35rem;
+  background: rgba(18, 31, 48, 0.92);
+  color: #fff;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 0.35rem);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.hub-portrait:hover::after,
+.hub-portrait:focus-within::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.hub-open-btn {
+  background-color: #338cea;
+  border-color: #338cea;
+  font-weight: 600;
+  margin-top: 0.5rem;
+}
+
+.hub-open-btn:hover {
+  background-color: #2a73c4;
+  border-color: #2a73c4;
+}
+
+#all-rights-reserved {
+  text-align: center;
+  font-size: 10pt;
+  color: #52606d;
+  padding: 1rem 0 2rem;
+}
+
+#all-rights-reserved a {
+  color: #338cea;
+}
