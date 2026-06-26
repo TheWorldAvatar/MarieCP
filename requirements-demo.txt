@@ -1,0 +1,3 @@
+# Demo server (mirrored Marie/Zaha UI + KGQA API adapter)
+-r requirements-mini-marie.txt
+-r requirements-kgqa.txt
