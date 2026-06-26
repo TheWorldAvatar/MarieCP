@@ -26,11 +26,9 @@ def test_hub_routes():
     resp = client.get("/demos/hub/")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
-    assert "Marie" in body and "Zaha" in body
-    assert "Elisa" not in body
-
-    resp = client.get("/demos/elisa/")
-    assert resp.status_code == 404
+    assert "Marie" in body and "Zaha" in body and "Elisa" in body
+    assert "https://qa.theworldavatar.io/" in body
+    assert 'href="/demos/elisa/' not in body
 
     resp = client.get("/demos/marie-classic/")
     assert resp.status_code == 200

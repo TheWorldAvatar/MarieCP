@@ -111,11 +111,17 @@ def _marie_frontend_base() -> str:
     return marie_public_base().rstrip("/")
 
 
+def _elisa_frontend_url() -> str:
+    """External hybrid RAG UI (hosted QA deployment by default)."""
+    return os.environ.get("ELISA_FRONTEND_URL", "https://qa.theworldavatar.io").rstrip("/")
+
+
 def _render_demo_hub():
     return render_template(
         "hub.html",
         marie_url="/demos/marie-classic/",
         zaha_url="/demos/zaha/",
+        elisa_url=f"{_elisa_frontend_url()}/",
     )
 
 
