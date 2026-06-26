@@ -20,7 +20,8 @@ COPY configs/ configs/
 COPY models/ models/
 COPY src/ src/
 COPY docker/demo/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN chmod +x /entrypoint.sh \
+    && mkdir -p data/log raw_data sandbox/tasks sandbox/code data/generic
 
 ENV PYTHONPATH=/app \
     DEMO_CONFIG=docker \
