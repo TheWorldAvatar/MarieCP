@@ -39,3 +39,17 @@ def format_tsv(rows: List[Dict[str, Any]]) -> str:
     for row in rows:
         lines.append("\t".join(str(row.get(k, "")) for k in keys))
     return "\n".join(lines)
+
+
+def parse_tsv(text: str) -> List[Dict[str, Any]]:
+    lines = [line for line in (text or "").splitlines() if line.strip()]
+    if len(lines) < 2:
+        return []
+    headers = lines[0].split("\t")
+    rows: List[Dict[str, Any]] = []
+    for line in lines[1:]:
+        values = line.split("\t")
+        if len(values) != len(headers):
+            continue
+        rows.append({headers[i]: values[i] for i in range(len(headers))})
+    return rows

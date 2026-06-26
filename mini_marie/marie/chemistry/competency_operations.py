@@ -483,7 +483,16 @@ def query_physprops_wide(*, smiles: str = "", limit: int = ONLINE_PROBE_LIMIT) -
 
     store = SpeciesJoinStore()
     try:
-        if not store.is_built():
+        ready = store.is_built() or (
+            store._table_exists("corpus_species_physprops_wide")
+            and int(
+                store._conn.execute(
+                    "SELECT COUNT(*) FROM corpus_species_physprops_wide"
+                ).fetchone()[0]
+            )
+            > 0
+        )
+        if not ready:
             return (
                 "No OntoSpecies join index yet. Build with:\n"
                 "  python -m mini_marie.marie.chemistry.build_species_join_index --build"

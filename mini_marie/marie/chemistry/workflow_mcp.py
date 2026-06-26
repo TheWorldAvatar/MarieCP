@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from mini_marie.marie.chemistry.chemistry_workflow_engine import (
     load_manifest,
@@ -14,8 +15,18 @@ from mini_marie.marie.chemistry.chemistry_workflow_engine import (
 )
 from mini_marie.marie.chemistry.limits import DEFAULT_ONLINE_PROBE_LIMIT
 from mini_marie.marie.chemistry.sparql import format_tsv
+from mini_marie.workflow_parameters import parse_parameters_json, resolve_workflow_parameters
 
 MCP_ONLINE_LIMIT = DEFAULT_ONLINE_PROBE_LIMIT
+
+
+def _demo_force_refresh() -> bool:
+    return os.environ.get("DEMO_FORCE_REFRESH", "true").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
 
 
 def list_competency_workflows_text() -> str:
@@ -31,6 +42,7 @@ def _compact_rows(rows: List[Dict[str, Any]], max_rows: int = 5) -> List[Dict[st
 
 
 def format_competency_mcp_response(result: Dict[str, Any], recording_path: Path) -> str:
+    params = result.get("resolved_parameters") or {}
     lines = [
         f"status\t{result.get('status')}",
         f"mode\t{result.get('mode')}",
@@ -38,6 +50,7 @@ def format_competency_mcp_response(result: Dict[str, Any], recording_path: Path)
         f"title\t{result.get('title', '')}",
         f"elapsed_ms\t{result.get('elapsed_ms', '')}",
         f"recording_path\t{recording_path.resolve()}",
+        f"resolved_parameters\t{params}",
         f"answer\t{result.get('answer')}",
         "",
         "step\ttype\ttool\tstatus\trow_count\telapsed_ms",
@@ -71,12 +84,24 @@ def format_competency_mcp_response(result: Dict[str, Any], recording_path: Path)
     return "\n".join(lines)
 
 
-def run_competency_online(workflow_id: str, online_limit: int = MCP_ONLINE_LIMIT) -> str:
+def run_competency_online(
+    workflow_id: str,
+    online_limit: int = MCP_ONLINE_LIMIT,
+    *,
+    question: str = "",
+    parameters_json: str = "",
+    force_refresh: Optional[bool] = None,
+) -> str:
     wf = load_workflow(workflow_id)
+    overrides = parse_parameters_json(parameters_json)
+    parameters = resolve_workflow_parameters(wf, question, overrides)
     result = run_competency_workflow(
         wf,
         mode="online",
         online_limit=min(online_limit, MCP_ONLINE_LIMIT),
+        force_refresh=_demo_force_refresh() if force_refresh is None else force_refresh,
+        question=question,
+        parameters=parameters,
     )
     path = save_run(result)
     return format_competency_mcp_response(result, path)

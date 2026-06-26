@@ -204,6 +204,14 @@
     {
       "id": "mq13_multi_source_pka",
       "title": "MQ13 — compounds with pKa across multiple sources",
+      "parameters": {
+        "min_source_count": {
+          "default": 1,
+          "comparator": "gt",
+          "order": 0,
+          "hints": ["multiple sources", "source count"]
+        }
+      },
       "steps": [
         {
           "tool": "query_pka_enriched",
@@ -232,9 +240,10 @@
           "output_variable": "multi_source_rows",
           "logic": "and",
           "filters": [
-            {"field": "source_count", "op": "gt", "value": 1}
+            {"field": "source_count", "op": "gt", "value": "$min_source_count"}
           ],
-          "offline_only": true
+          "offline_only": true,
+          "online_preview": true
         }
       ],
       "answer_variable": "multi_source_rows"
@@ -509,7 +518,21 @@
     },
     {
       "id": "mq41_zeolite_area_volume",
-      "title": "MQ41 — zeolites with occupiable area >500 and unit cell volume <200 (endpoint gap: no numeric props)",
+      "title": "MQ41 — zeolites filtered by accessible area and occupiable volume per cell",
+      "parameters": {
+        "min_accessible_area": {
+          "default": 500,
+          "comparator": "gt",
+          "order": 0,
+          "hints": ["accessible area", "area per cell"]
+        },
+        "max_volume_per_cell": {
+          "default": 200,
+          "comparator": "lt",
+          "order": 1,
+          "hints": ["occupiable volume", "volume per cell"]
+        }
+      },
       "steps": [
         {
           "tool": "list_zeolite_numeric_props",
@@ -526,10 +549,11 @@
           "output_variable": "filtered_materials",
           "logic": "and",
           "filters": [
-            {"field": "occupiable_area", "op": "gt", "value": 500},
-            {"field": "unit_cell_volume", "op": "lt", "value": 200}
+            {"field": "accessible_area_per_cell", "op": "gt", "value": "$min_accessible_area"},
+            {"field": "occupiable_volume_per_cell", "op": "lt", "value": "$max_volume_per_cell"}
           ],
-          "offline_only": true
+          "offline_only": true,
+          "online_preview": true
         }
       ],
       "answer_variable": "filtered_materials"

@@ -14,6 +14,7 @@ from mini_marie.marie.chemistry.workflow_mcp import (
     replay_competency_offline,
     run_competency_online,
 )
+from mini_marie.row_filters import filter_row_pool_text
 
 
 def create_chemistry_mcp(namespace: str) -> FastMCP:
@@ -87,11 +88,32 @@ def create_chemistry_mcp(namespace: str) -> FastMCP:
         name="run_competency_online",
         description=(
             "Run a chemistry competency workflow online (LIMIT 5). "
-            "Returns compact TSV + recording_path for offline replay."
+            "Pass `question` and/or `parameters_json` when the workflow declares numeric "
+            "thresholds (e.g. greater than X). Returns compact TSV + recording_path."
         ),
     )
-    def run_competency_online_tool(workflow_id: str, online_limit: int = ONLINE_PROBE_LIMIT) -> str:
-        return run_competency_online(workflow_id, online_limit=online_limit)
+    def run_competency_online_tool(
+        workflow_id: str,
+        online_limit: int = ONLINE_PROBE_LIMIT,
+        question: str = "",
+        parameters_json: str = "",
+    ) -> str:
+        return run_competency_online(
+            workflow_id,
+            online_limit=online_limit,
+            question=question,
+            parameters_json=parameters_json,
+        )
+
+    @mcp.tool(
+        name="filter_row_pool",
+        description=(
+            "Apply generic filter_rows clauses to a TSV row pool (numeric or string columns). "
+            "filters_json: JSON array of {field, op, value} objects; logic: and|or."
+        ),
+    )
+    def filter_row_pool_tool(input_tsv: str, filters_json: str, logic: str = "and") -> str:
+        return filter_row_pool_text(input_tsv, filters_json, logic=logic)
 
     @mcp.tool(
         name="replay_competency_offline",

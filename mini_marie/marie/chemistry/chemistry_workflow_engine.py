@@ -22,6 +22,10 @@ from mini_marie.probe_sequence import (
 from mini_marie.row_joins import run_join_rows_transform
 from mini_marie.row_filters import run_filter_rows_transform
 from mini_marie.row_aggregates import run_group_aggregate_transform
+from mini_marie.workflow_parameters import (
+    resolve_workflow_parameters,
+    seed_workflow_variables,
+)
 
 MANIFEST_PATH = Path(__file__).resolve().parent / "workflows" / "competency_suite.json"
 RUNS_DIR = Path(__file__).resolve().parent / "competency_runs"
@@ -192,6 +196,39 @@ def _run_transform_step(
     raise ValueError(f"Unsupported transform: {transform}")
 
 
+def _should_preview_offline_step(
+    step: Dict[str, Any],
+    mode: str,
+    steps: List[Dict[str, Any]],
+    index: int,
+) -> bool:
+    if mode != "online" or not step.get("offline_only"):
+        return False
+    if step.get("online_preview") is False:
+        return False
+    if step.get("online_preview") is True:
+        return True
+    step_type = step.get("type") or "tool"
+    if step_type == "transform" and step.get("transform") == "filter_rows":
+        return True
+    out_var = step.get("output_variable")
+    if not out_var:
+        return False
+    for later in steps[index + 1 :]:
+        if not later.get("offline_only") or later.get("online_preview") is False:
+            continue
+        if later.get("input_variable") == out_var and (
+            later.get("online_preview") is True
+            or later.get("transform") == "filter_rows"
+        ):
+            return True
+        if later.get("input_variable") == out_var:
+            later_idx = steps.index(later)
+            if _should_preview_offline_step(later, mode, steps, later_idx):
+                return True
+    return False
+
+
 def run_competency_workflow(
     workflow: Dict[str, Any],
     *,
@@ -199,25 +236,42 @@ def run_competency_workflow(
     online_limit: int = DEFAULT_ONLINE_PROBE_LIMIT,
     force_refresh: bool = False,
     recording: Optional[Dict[str, Any]] = None,
+    question: str = "",
+    parameters: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     cache = ChemistryCache()
     variables: Dict[str, Any] = {}
     call_trace: List[Dict[str, Any]] = []
+    resolved_parameters = parameters
+    if resolved_parameters is None and workflow.get("parameters"):
+        resolved_parameters = resolve_workflow_parameters(workflow, question)
+    elif resolved_parameters is None:
+        resolved_parameters = {}
 
     if recording and mode == "offline":
         variables = seed_variables_from_recording(recording, workflow)
+        if recording.get("resolved_parameters"):
+            variables.update(recording["resolved_parameters"])
         probed = probed_sequence_from_recording(recording)
         steps = steps_from_probed_sequence(probed)
     else:
         steps = workflow.get("steps", [])
+        variables = seed_workflow_variables(workflow, resolved_parameters)
 
     try:
         for i, step in enumerate(steps, 1):
             if step.get("offline_only") and mode == "online":
+                if _should_preview_offline_step(step, mode, steps, i - 1):
+                    result = _run_transform_step(i, step, variables)
+                    result["status"] = "preview"
+                    result["offline_only"] = True
+                    call_trace.append(result)
+                    continue
                 call_trace.append(
                     {
                         "step": i,
                         "step_type": step.get("type", "tool"),
+                        "transform": step.get("transform"),
                         "status": "skipped",
                         "rows": [],
                         "row_count": 0,
@@ -259,6 +313,7 @@ def run_competency_workflow(
             "answer_tsv": format_tsv(answer) if isinstance(answer, list) and answer else "",
             "call_trace": call_trace,
             "cache_stats": cache.stats(),
+            "resolved_parameters": resolved_parameters,
         }
         if mode == "online":
             result["probed_sequence"] = build_probed_sequence(workflow, call_trace)
@@ -271,7 +326,7 @@ def save_run(result: Dict[str, Any]) -> Path:
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
     wf_id = result.get("workflow_id", "unknown")
     mode = result.get("mode", "online")
-    ts = int(time.time())
+    ts = int(time.time() * 1000)
     path = RUNS_DIR / f"{wf_id}_{mode}_{ts}.json"
     path.write_text(json.dumps(result, indent=2), encoding="utf-8")
     return path

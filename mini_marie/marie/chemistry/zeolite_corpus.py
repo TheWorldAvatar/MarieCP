@@ -30,11 +30,16 @@ ZEOLITE_PROPS = (
     "hasLatticeSystem",
     "hasGuestSpecies",
     "hasGuestFormula",
-    "hasOccupiableArea",
-    "hasUnitCellVolume",
+    "hasAccessibleAreaPerCell",
+    "hasOccupiableVolumePerCell",
     "hasChemicalFormula",
     "isReferenceZeolite",
 )
+
+_NUMERIC_PROP_COLUMNS = {
+    "hasAccessibleAreaPerCell": "accessible_area_per_cell",
+    "hasOccupiableVolumePerCell": "occupiable_volume_per_cell",
+}
 
 
 def _esc_iri(value: str) -> str:
@@ -88,7 +93,8 @@ def material_details_query(iri_list: Sequence[str]) -> str:
         _prefix_block("ontozeolite")
         + f"""
 SELECT ?material ?label ?frameworkCode ?formula
-       ?hasLatticeSystem ?hasGuestSpecies ?hasOccupiableArea ?hasUnitCellVolume
+       ?hasLatticeSystem ?hasGuestSpecies ?hasGuestFormula
+       ?hasAccessibleAreaPerCell ?hasOccupiableVolumePerCell
        ?hasChemicalFormula ?isReferenceZeolite WHERE {{
   VALUES ?material {{ {values} }}
   ?material a oz:ZeoliticMaterial .
@@ -102,8 +108,14 @@ SELECT ?material ?label ?frameworkCode ?formula
   OPTIONAL {{ ?material oz:hasLatticeSystem ?hasLatticeSystem }}
   OPTIONAL {{ ?material oz:hasGuestSpecies ?hasGuestSpecies }}
   OPTIONAL {{ ?material oz:hasGuestFormula ?hasGuestFormula }}
-  OPTIONAL {{ ?material oz:hasOccupiableArea ?hasOccupiableArea }}
-  OPTIONAL {{ ?material oz:hasUnitCellVolume ?hasUnitCellVolume }}
+  OPTIONAL {{
+    ?material oz:hasAccessibleAreaPerCell ?areaNode .
+    ?areaNode oc:hasValue ?hasAccessibleAreaPerCell .
+  }}
+  OPTIONAL {{
+    ?material oz:hasOccupiableVolumePerCell ?volumeNode .
+    ?volumeNode oc:hasValue ?hasOccupiableVolumePerCell .
+  }}
   OPTIONAL {{ ?material oz:isReferenceZeolite ?isReferenceZeolite }}
 }}
 """
@@ -122,6 +134,53 @@ SELECT (COUNT(DISTINCT ?m) AS ?n) WHERE { ?m a oz:ZeoliticMaterial . }
         return int(str(rows[0].get("n", "0")))
     except (IndexError, ValueError):
         return 0
+
+
+def numeric_props_live_query(*, limit: int, after_subject: str = "") -> str:
+    lim = max(1, int(limit))
+    cursor_filter = ""
+    if after_subject.strip():
+        cursor_filter = f'  FILTER(STR(?material) > "{_esc_iri(after_subject.strip())}")\n'
+    return (
+        _prefix_block("ontozeolite")
+        + f"""
+SELECT ?material ?label ?frameworkCode ?formula
+       ?accessible_area_per_cell ?occupiable_volume_per_cell WHERE {{
+  ?material a oz:ZeoliticMaterial .
+{cursor_filter}  OPTIONAL {{ ?material rdfs:label ?label }}
+  OPTIONAL {{
+    ?fw oz:hasZeoliticMaterial ?material .
+    ?fw oz:hasFrameworkCode ?frameworkCode .
+  }}
+  OPTIONAL {{ ?material oz:hasChemicalFormula ?formula }}
+  OPTIONAL {{
+    ?material oz:hasAccessibleAreaPerCell ?areaNode .
+    ?areaNode oc:hasValue ?accessible_area_per_cell .
+  }}
+  OPTIONAL {{
+    ?material oz:hasOccupiableVolumePerCell ?volumeNode .
+    ?volumeNode oc:hasValue ?occupiable_volume_per_cell .
+  }}
+  FILTER(BOUND(?accessible_area_per_cell) || BOUND(?occupiable_volume_per_cell))
+}}
+ORDER BY ?material
+LIMIT {lim}
+"""
+    )
+
+
+def fetch_numeric_props_live(*, limit: int = 5000) -> List[Dict[str, Any]]:
+    rows = _execute("ontozeolite", numeric_props_live_query(limit=limit))
+    for row in rows:
+        row["material_iri"] = str(row.pop("material", "")).strip()
+        for field in ("accessible_area_per_cell", "occupiable_volume_per_cell"):
+            val = row.get(field)
+            if val is not None and str(val).strip() != "":
+                try:
+                    row[field] = float(str(val).strip())
+                except ValueError:
+                    pass
+    return rows
 
 
 def guest_formulas_for_iris_query(iri_list: Sequence[str]) -> str:
@@ -414,21 +473,12 @@ class ZeoliteCorpusStore:
 
     def materials_numeric_rows(self, *, limit: int = 5000) -> List[Dict[str, Any]]:
         """Pivot numeric zeolite properties for filter_rows / MQ41 pipelines."""
-        numeric_props = (
-            "hasOccupiableArea",
-            "hasUnitCellVolume",
-            "hasLatticeSystem",
-        )
+        numeric_props = tuple(_NUMERIC_PROP_COLUMNS.keys()) + ("hasLatticeSystem",)
         case_lines = []
         for prop in numeric_props:
-            key = prop.replace("has", "").replace("UnitCell", "unit_cell_")
-            key = "".join(["_" + c.lower() if c.isupper() else c for c in key]).lstrip("_")
-            if key.startswith("occupiable"):
-                key = "occupiable_area"
-            elif key.startswith("unit_cell"):
-                key = "unit_cell_volume"
-            elif key.startswith("lattice"):
-                key = "lattice_system"
+            key = _NUMERIC_PROP_COLUMNS.get(prop)
+            if not key:
+                key = "lattice_system" if prop == "hasLatticeSystem" else prop
             case_lines.append(
                 f"MAX(CASE WHEN p.property_local = '{prop}' THEN p.property_value END) AS {key}"
             )
@@ -442,13 +492,40 @@ class ZeoliteCorpusStore:
         """
         rows = [dict(r) for r in self._conn.execute(sql, (max(1, int(limit)),))]
         for row in rows:
-            for field in ("occupiable_area", "unit_cell_volume"):
+            for field in ("accessible_area_per_cell", "occupiable_volume_per_cell"):
                 val = row.get(field)
                 if val is not None and str(val).strip() != "":
                     try:
                         row[field] = float(str(val).strip())
                     except ValueError:
                         pass
+        has_numeric = any(
+            row.get("accessible_area_per_cell") is not None
+            or row.get("occupiable_volume_per_cell") is not None
+            for row in rows
+        )
+        if has_numeric:
+            return rows
+        live_rows = fetch_numeric_props_live(limit=limit)
+        if live_rows:
+            now = time.time()
+            for row in live_rows:
+                material = str(row.get("material_iri", "")).strip()
+                if not material:
+                    continue
+                upsert_row = {
+                    "material": material,
+                    "label": row.get("label"),
+                    "frameworkCode": row.get("frameworkCode"),
+                    "formula": row.get("formula"),
+                }
+                for prop, col in _NUMERIC_PROP_COLUMNS.items():
+                    val = row.get(col)
+                    if val is not None:
+                        upsert_row[prop] = val
+                self._upsert_material_row(upsert_row, now)
+            self._conn.commit()
+            return live_rows[: max(1, int(limit))]
         return rows
 
     def materials_numeric_rows_tsv(self, *, limit: int = 5000) -> str:
