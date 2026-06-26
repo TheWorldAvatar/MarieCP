@@ -122,6 +122,31 @@ def probe_sg_dispersion_point(
     z0 = z_map.get("0") or (list(z_map.values())[0] if z_map else "")
     timestep = str(times[0]) if times else ""
 
+    if not deriv or not timestep:
+        return [
+            {
+                "probe": "GetPollutantConcentrations",
+                "location": f"lat={lat}, lng={lng}",
+                "pollutant": pollutant,
+                "ok": False,
+                "status": "unavailable",
+                "error_preview": (
+                    "Dispersion simulation metadata unavailable; "
+                    "cannot probe point concentrations without derivationIri/timestep."
+                ),
+            },
+            {
+                "simulation_metadata": {
+                    "derivation_iri": deriv,
+                    "timesteps_available": len(times),
+                    "first_timestep": timestep,
+                    "z_layers": list(z_map.keys()),
+                    "pollutants": list((meta.get("pollutants") or {}).values()),
+                    "note": "Singapore-wide CO/PM grid metadata may still exist in PostGIS via internal jdbc",
+                }
+            },
+        ]
+
     conc_params = {
         "lat": lat,
         "lng": lng,
@@ -143,6 +168,13 @@ def probe_sg_dispersion_point(
 
     conc = _http(conc_url)
     colour = _http(colour_url)
+    conc_status = conc.get("status") or conc.get("http") or ""
+    if not conc.get("ok") and conc_status in (500, 502, 503):
+        conc["error_preview"] = (
+            f"Backend returned HTTP {conc_status}; "
+            "point μg/m³ values require internal PostGIS — try get_sg_concentration_value_chain "
+            "and get_sg_jurong_pollutant_status for KG evidence."
+        )
     return [
         {
             "probe": "GetPollutantConcentrations",

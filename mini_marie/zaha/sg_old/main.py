@@ -21,9 +21,12 @@ def instruction_prompt():
         "Singapore KG on sg-old.theworldavatar.io (offline SQLite caches).\n\n"
         "Blazegraph: carpark, kb (dispersion), plot (zoning T-box), company (OWL).\n"
         "Ontop: ~114k buildings + land-use/GFA (warm via warm_ontop_cache).\n\n"
-        "Start with get_sg_ontop_cache_status / get_sg_building_count.\n"
-        "Zoning definitions: get_sg_zoning_type_definition(special_use|business1|business2|health_medical).\n"
-        "Building lookup by name: lookup_sg_buildings_by_name, get_sg_building_height_by_name."
+        "Compose answers from atomic tools — do not expect single-shot answer tools.\n"
+        "Pollutants: get_sg_dispersion_simulations, get_sg_concentration_value_chain, "
+        "get_sg_virtual_sensor_pollutants, probe_sg_dispersion_point.\n"
+        "Ships: get_sg_ship_timeseries_info, get_sg_ship_speed_value_chain, get_sg_ship_measurable_properties.\n"
+        "Carparks: find_nearest_sg_carpark_to_create, fuzzy_search_sg_labels.\n"
+        "Buildings/land-use: get_sg_building_count, lookup_sg_buildings_by_name, count_sg_within_max_gfa."
     )
 
 
@@ -90,12 +93,10 @@ def find_nearest_sg_carpark_to_create(limit: int = 5) -> str:
     return op.format_tsv(labels.find_nearest_carpark_to_create(limit=min(limit, 20)))
 
 
-@mcp.tool(name="get_sg_nearest_carpark_to_create_answer", description="Q17 answer: CREATE ref + nearest carpark IRI/label/distance with runners-up")
-def get_sg_nearest_carpark_to_create_answer(limit: int = 5) -> str:
-    return op.format_tsv(pcq.get_sg_nearest_carpark_to_create_answer(limit=min(limit, 10)))
-
-
-@mcp.tool(name="get_sg_jurong_pollutant_status", description="Q15: Jurong vs Singapore-grid virtual sensors and CO timeseries chain")
+@mcp.tool(
+    name="get_sg_jurong_pollutant_status",
+    description="KB evidence: Jurong mentions, virtual sensors, CO concentration chain, live API reachability",
+)
 def get_sg_jurong_pollutant_status() -> str:
     return op.format_tsv(pcq.get_sg_jurong_pollutant_status())
 
@@ -105,19 +106,12 @@ def get_sg_virtual_sensor_pollutants(limit: int = 20) -> str:
     return op.format_tsv(pcq.get_sg_virtual_sensor_pollutants(limit=min(limit, 50)))
 
 
-@mcp.tool(name="get_sg_ship_measurable_properties", description="Q16: ship static RDF numerics (MMSI, draught) vs speed PostGIS-only")
+@mcp.tool(
+    name="get_sg_ship_measurable_properties",
+    description="Ship static RDF numerics (MMSI, draught, etc.) vs speed/lat/lon in PostGIS only",
+)
 def get_sg_ship_measurable_properties(mmsi: str = "563071320") -> str:
     return op.format_tsv(pcq.get_sg_ship_measurable_properties(mmsi=mmsi))
-
-
-@mcp.tool(name="get_sg_q15_jurong_answer", description="Q15 partial answer: Jurong pollutants via dispersion grid + live probe status")
-def get_sg_q15_jurong_answer() -> str:
-    return op.format_tsv(pcq.get_sg_q15_jurong_answer())
-
-
-@mcp.tool(name="get_sg_q16_ship_speed_answer", description="Q16 partial answer: ship identity + PostGIS speed chain evidence")
-def get_sg_q16_ship_speed_answer(mmsi: str = "563071320") -> str:
-    return op.format_tsv(pcq.get_sg_q16_ship_speed_answer(mmsi=mmsi))
 
 
 @mcp.tool(name="get_sg_postgis_registry", description="PostGIS jdbc, timeseries counts, internal agent URLs from kb cache")

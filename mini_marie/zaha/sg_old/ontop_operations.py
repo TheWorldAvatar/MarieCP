@@ -6,7 +6,8 @@ import re
 from typing import Any, Dict, List
 
 from mini_marie.zaha.sg_old import local_store as bg
-from mini_marie.zaha.sg_old.ontop_store import ONTOP_ENDPOINT, cache_ready, connect, land_plot_count
+from mini_marie.zaha.sg_old.ontop_store import ONTOP_ENDPOINT, cache_ready, connect, db_path, land_plot_count
+from mini_marie.zaha.sg_old.ontop_store import building_count
 from mini_marie.zaha.sg_old.sparql_get import execute_sparql_get
 
 RDFS_LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
@@ -22,10 +23,17 @@ RESIDENTIAL = "https://www.theworldavatar.com/kg/landplot/LandUseType_6cbda899-2
 
 
 def _require_cache() -> None:
-    if not cache_ready():
+    if cache_ready():
+        return
+    warm_cmd = "python -m mini_marie.zaha.sg_old.warm_ontop_cache"
+    if building_count() == 0:
         raise RuntimeError(
-            "Ontop cache empty. Run: python -m mini_marie.zaha.sg_old.warm_ontop_cache"
+            f"Singapore Ontop cache is not warmed (no building rows in {db_path()}). "
+            f"Run: {warm_cmd}"
         )
+    raise RuntimeError(
+        f"Singapore Ontop cache is incomplete (warm_complete != 1). Run: {warm_cmd}"
+    )
 
 
 def _land_use_short(iri: str) -> str:

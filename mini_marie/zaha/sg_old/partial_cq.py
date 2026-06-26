@@ -1,18 +1,17 @@
-"""Answer paths for partial Zaha competency questions Q15–Q17."""
+"""Composable evidence helpers for Singapore dispersion, ships, and carparks."""
 
 from __future__ import annotations
 
 import sqlite3
 from typing import Any, Dict, List
 
-from mini_marie.zaha.sg_old import label_store as ls
 from mini_marie.zaha.sg_old.local_store import db_path, ensure_db
 
 DERIV_MAIN = "https://www.theworldavatar.com/kg/ontodispersion/DerivationWithTimeSeries_79119944-40dd-41b3-a924-6307fed779f2"
 
 
 def get_sg_virtual_sensor_pollutants(limit: int = 20) -> List[Dict[str, Any]]:
-    """Virtual sensors in kb: pollutants reported and derivation linkage (Q15)."""
+    """Virtual sensors in kb: pollutants reported and derivation linkage."""
     ensure_db()
     conn = sqlite3.connect(db_path())
     rows = conn.execute(
@@ -54,7 +53,7 @@ def get_sg_virtual_sensor_pollutants(limit: int = 20) -> List[Dict[str, Any]]:
 
 
 def get_sg_jurong_pollutant_status() -> List[Dict[str, Any]]:
-    """Whether Jurong-specific concentrations are reachable (Q15)."""
+    """KB evidence for whether point pollutant concentrations are reachable."""
     ensure_db()
     conn = sqlite3.connect(db_path())
     jn = conn.execute(
@@ -93,58 +92,8 @@ def get_sg_jurong_pollutant_status() -> List[Dict[str, Any]]:
     ]
 
 
-def get_sg_q15_jurong_answer() -> List[Dict[str, Any]]:
-    """Best-effort Q15 answer: simulation scope + pollutant types + live probe status."""
-    from mini_marie.zaha.sg_old.live_api import probe_sg_dispersion_point
-
-    status = get_sg_jurong_pollutant_status()[0]
-    vs = get_sg_virtual_sensor_pollutants(limit=5)
-    probe = probe_sg_dispersion_point(lat=1.33, lng=103.74, pollutant="CO")
-    pollutants = (probe[2].get("simulation_metadata") or {}).get("pollutants") or []
-    return [
-        {
-            "question": "Pollutant concentrations at Jurong Island",
-            "answer_status": "partial",
-            "jurong_triples_in_kb": status["jurong_triples_in_kb"],
-            "simulation_scope": "Singapore-wide dispersion (centroid ~1.26N, 103.78E)",
-            "available_pollutants": "; ".join(pollutants) if pollutants else "CO; PM2.5; PM10; NOx; SO2; uHC",
-            "virtual_sensors_in_kb": status["virtual_sensor_count"],
-            "virtual_sensor_geo_in_rdf": False,
-            "co_timeseries": status["co_timeseries_example"],
-            "live_probe_GetPollutantConcentrations": probe[0].get("status"),
-            "live_probe_GetColourBar": probe[1].get("status"),
-            "answer": "Cannot return Jurong μg/m³ numerics from public APIs; PostGIS jdbc://sg-postgis internal only; metadata confirms CO grid exists",
-        },
-        *vs[:3],
-    ]
-
-
-def get_sg_q16_ship_speed_answer(mmsi: str = "563071320") -> List[Dict[str, Any]]:
-    """Best-effort Q16 answer: ship identity + static RDF numerics; speed in PostGIS only."""
-    props = get_sg_ship_measurable_properties(mmsi=mmsi)
-    from mini_marie.zaha.sg_old.value_chain import get_sg_ship_speed_value_chain
-
-    chain = get_sg_ship_speed_value_chain(mmsi=mmsi)[0]
-    return [
-        {
-            "question": f"Current speed of ship MMSI {mmsi}",
-            "answer_status": "partial",
-            "ship_label": props[0].get("label") if props else "",
-            "speed_timeseries_iri": chain.get("timeseries_iri"),
-            "speed_numerical_in_rdf": False,
-            "postgis_jdbc": "jdbc:postgresql://sg-postgis:5432/postgres",
-            "shared_measures_on_timeseries": chain.get("measures_sharing_timeseries"),
-            "static_rdf_properties": "; ".join(
-                f"{r.get('measure')}={r.get('hasNumericalValue')}" for r in props[1:6] if r.get("measure")
-            ),
-            "answer": "Speed over ground not in Blazegraph; linked via ShipSpeedMeasure->hasTimeSeries->PostGIS; no public timeseries-agent on sg-old",
-        },
-        *props[1:8],
-    ]
-
-
 def get_sg_ship_measurable_properties(mmsi: str = "563071320") -> List[Dict[str, Any]]:
-    """Static ship measures with RDF numerics vs speed (timeseries-only) (Q16)."""
+    """Static ship measures with RDF numerics vs speed (timeseries-only)."""
     ensure_db()
     conn = sqlite3.connect(db_path())
     base = f"https://www.theworldavatar.com/kg/ontodispersion/Ship{mmsi}"
@@ -180,29 +129,3 @@ def get_sg_ship_measurable_properties(mmsi: str = "563071320") -> List[Dict[str,
     for s, val in rows:
         out.append({"measure": s.rsplit("/", 1)[-1], "hasNumericalValue": val})
     return out
-
-
-def get_sg_nearest_carpark_to_create_answer(*, limit: int = 5) -> List[Dict[str, Any]]:
-    """Full Q17 answer: CREATE ref + ranked nearest carparks from geocode cache."""
-    nearest = ls.find_nearest_carpark_to_create(limit=limit)
-    if nearest and nearest[0].get("carpark_iri"):
-        top = nearest[0]
-        return [
-            {
-                "question": "Nearest carpark to CREATE Tower",
-                "create_reference": ls.CREATE_TOWER_REF,
-                "create_in_rdf_labels": False,
-                "geocoded_candidates": 30,
-                "answer_carpark_iri": top["carpark_iri"],
-                "answer_label": top["label"],
-                "answer_lat": top["lat"],
-                "answer_lon": top["lon"],
-                "distance_m": top["distance_m"],
-                "method": "carpark address label -> Nominatim geocode -> haversine to CREATE Tower",
-                "runners_up": "; ".join(
-                    f"{r['label']} ({r['distance_m']}m)" for r in nearest[1:3]
-                ),
-            },
-            *nearest,
-        ]
-    return nearest

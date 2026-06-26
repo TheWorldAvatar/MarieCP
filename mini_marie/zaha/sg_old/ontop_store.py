@@ -34,14 +34,19 @@ def db_path() -> Path:
     return cache_dir() / "ontop_cache.sqlite"
 
 
-def connect() -> sqlite3.Connection:
+def _raw_connect() -> sqlite3.Connection:
     conn = sqlite3.connect(db_path())
     conn.row_factory = sqlite3.Row
     return conn
 
 
+def connect() -> sqlite3.Connection:
+    ensure_schema()
+    return _raw_connect()
+
+
 def ensure_schema() -> None:
-    conn = connect()
+    conn = _raw_connect()
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS meta (

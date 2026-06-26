@@ -82,5 +82,12 @@
     "domain": "sg",
     "mcp_servers": ["sg-old"],
     "tags": ["carpark", "create"]
+  },
+  {
+    "id": "Q18",
+    "question": "What is the size of the smallest agricultural land in Singapore?",
+    "domain": "sg",
+    "mcp_servers": ["sg-old"],
+    "tags": ["ontop", "land_plot", "agriculture"]
   }
 ]
