@@ -19,6 +19,12 @@ def parse_tsv_field(text: str, field: str) -> Optional[str]:
     return None
 
 
+def _normalize_recording_path(raw: Optional[str]) -> Optional[str]:
+    if not raw:
+        return None
+    return str(Path(raw.strip().strip('"')).resolve())
+
+
 def extract_from_text(text: str) -> Dict[str, Optional[str]]:
     recording = parse_tsv_field(text, "recording_path")
     workflow_id = parse_tsv_field(text, "workflow_id")
@@ -26,51 +32,76 @@ def extract_from_text(text: str) -> Dict[str, Optional[str]]:
         match = ONLINE_JSON.search(text or "")
         if match:
             recording = match.group(1)
-    if recording:
-        recording = str(Path(recording.strip().strip('"')).resolve())
+    recording = _normalize_recording_path(recording)
     return {"recording_path": recording, "workflow_id": workflow_id}
 
 
-def extract_from_metadata(metadata: Dict[str, Any]) -> Dict[str, Optional[str]]:
+def extract_all_from_text(text: str) -> List[Dict[str, Optional[str]]]:
+    """All recording_path / workflow_id pairs found in one tool output or answer."""
+    if not (text or "").strip():
+        return []
+    out: List[Dict[str, Optional[str]]] = []
+    seen: set[str] = set()
+
+    recording = parse_tsv_field(text, "recording_path")
+    workflow_id = parse_tsv_field(text, "workflow_id")
+    if recording:
+        path = _normalize_recording_path(recording)
+        if path and path not in seen:
+            seen.add(path)
+            out.append({"recording_path": path, "workflow_id": workflow_id})
+
+    for match in ONLINE_JSON.finditer(text or ""):
+        path = _normalize_recording_path(match.group(1))
+        if path and path not in seen:
+            seen.add(path)
+            out.append({"recording_path": path, "workflow_id": workflow_id})
+
+    return out
+
+
+def extract_all_from_metadata(metadata: Dict[str, Any]) -> List[Dict[str, Optional[str]]]:
+    """Ordered unique recordings from all tool outputs."""
     tool_activity = metadata.get("tool_activity") or {}
-    recording: Optional[str] = None
-    workflow_id: Optional[str] = None
+    out: List[Dict[str, Optional[str]]] = []
+    seen: set[str] = set()
 
     for item in tool_activity.get("tool_outputs") or []:
         content = item.get("content") or ""
-        parsed = extract_from_text(content)
-        if parsed.get("recording_path"):
-            recording = parsed["recording_path"]
-        if parsed.get("workflow_id"):
-            workflow_id = parsed["workflow_id"]
+        for parsed in extract_all_from_text(content):
+            path = parsed.get("recording_path")
+            if not path or path in seen:
+                continue
+            seen.add(path)
+            out.append(parsed)
 
-    if not recording:
-        for name in reversed(tool_activity.get("executed_tool_names") or []):
-            if name in (
-                "run_workflow_online",
-                "run_competency_online",
-                "replay_workflow_offline",
-                "replay_competency_offline",
-            ):
-                break
-
-    return {"recording_path": recording, "workflow_id": workflow_id}
+    return out
 
 
 def extract_recording_info(
     *,
     online_answer: str,
     metadata: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Optional[str]]:
+) -> Dict[str, Any]:
     """Best-effort extraction from tool outputs then agent answer text."""
-    info = extract_from_metadata(metadata or {})
-    if not info.get("recording_path"):
-        from_answer = extract_from_text(online_answer or "")
-        if from_answer.get("recording_path"):
-            info["recording_path"] = from_answer["recording_path"]
-        if from_answer.get("workflow_id") and not info.get("workflow_id"):
-            info["workflow_id"] = from_answer["workflow_id"]
-    return info
+    recordings = extract_all_from_metadata(metadata or [])
+
+    if not recordings and online_answer:
+        for parsed in extract_all_from_text(online_answer):
+            path = parsed.get("recording_path")
+            if not path:
+                continue
+            if not any(r.get("recording_path") == path for r in recordings):
+                recordings.append(parsed)
+
+    recording_paths = [r["recording_path"] for r in recordings if r.get("recording_path")]
+    primary = recordings[0] if recordings else {}
+    return {
+        "recording_path": primary.get("recording_path"),
+        "workflow_id": primary.get("workflow_id"),
+        "recording_paths": recording_paths,
+        "recordings": recordings,
+    }
 
 
 def load_recording_json(path: str) -> Dict[str, Any]:

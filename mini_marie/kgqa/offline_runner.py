@@ -3,16 +3,50 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from mini_marie.kgqa.mcp_router import domain_for_recording
 from mini_marie.kgqa.recording_utils import load_recording_json
+
+
+def _aggregate_batch_status(parts: Sequence[Dict[str, Any]]) -> str:
+    if not parts:
+        return "empty"
+    statuses = {p.get("status") for p in parts}
+    if statuses <= {"pass"}:
+        return "pass"
+    if "pass" in statuses or "partial" in statuses:
+        return "partial"
+    return "error"
 
 
 def _row_count(result: Dict[str, Any]) -> int:
     answer = result.get("answer")
     if isinstance(answer, list):
         return len(answer)
+    digest = result.get("answer_digest") or {}
+    auth = digest.get("authoritative") or {}
+    for key in ("buildings_with_wkt", "top_buildings", "top_building_iris"):
+        val = auth.get(key)
+        if isinstance(val, dict) and val.get("_row_count"):
+            return int(val["_row_count"])
+        if isinstance(val, list):
+            return len(val)
+    sidecar = result.get("sidecar") or {}
+    for artifact in sidecar.get("artifacts") or []:
+        if artifact.get("kind") == "variable" and artifact.get("name") in (
+            "buildings_with_wkt",
+            "top_building_rows",
+        ):
+            count = artifact.get("row_count")
+            if count:
+                return int(count)
+    for step in reversed(result.get("call_trace") or []):
+        tool = step.get("tool") or step.get("transform") or step.get("name") or ""
+        if tool in ("top_n_by_field", "buildings_with_locations_sql"):
+            count = step.get("row_count")
+            if count:
+                return int(count)
     trace = result.get("call_trace") or []
     return sum(int(s.get("row_count") or 0) for s in trace)
 
@@ -160,3 +194,67 @@ def replay_offline(
             "domain": domain,
             "offline_path": None,
         }
+
+
+def replay_offline_batch(
+    recording_paths: Sequence[str],
+    *,
+    workflow_ids: Optional[Sequence[Optional[str]]] = None,
+    offline_cap: int = 500_000,
+) -> Dict[str, Any]:
+    """
+    Replay full-scale results for every online recording from a multi-probe agent run.
+
+    Returns a batch envelope with ``parts`` (one per recording) plus backward-compatible
+    ``offline_path`` / ``row_count`` / ``answer`` fields from the first successful part.
+    """
+    paths = [str(Path(p).resolve()) for p in recording_paths if p]
+    if not paths:
+        return {
+            "status": "empty",
+            "parts": [],
+            "offline_paths": [],
+            "offline_path": None,
+            "row_count": 0,
+            "answer": None,
+        }
+
+    wf_ids: List[Optional[str]] = list(workflow_ids or [])
+    while len(wf_ids) < len(paths):
+        wf_ids.append(None)
+
+    parts: List[Dict[str, Any]] = []
+    for index, path in enumerate(paths):
+        part = replay_offline(
+            path,
+            workflow_id=wf_ids[index],
+            offline_cap=offline_cap,
+        )
+        part["recording_path"] = path
+        parts.append(part)
+
+    offline_paths = [p.get("offline_path") for p in parts if p.get("offline_path")]
+    row_count = sum(int(p.get("row_count") or 0) for p in parts)
+    answers = [p.get("answer") for p in parts if not _is_blank(p.get("answer"))]
+    primary = next((p for p in parts if p.get("status") == "pass"), parts[0])
+
+    return {
+        "status": _aggregate_batch_status(parts),
+        "parts": parts,
+        "offline_paths": offline_paths,
+        "offline_path": primary.get("offline_path"),
+        "row_count": row_count,
+        "answer": answers[0] if len(answers) == 1 else answers or None,
+        "domain": primary.get("domain"),
+        "recording_paths": paths,
+    }
+
+
+def _is_blank(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return not value.strip()
+    if isinstance(value, list):
+        return len(value) == 0
+    return False
