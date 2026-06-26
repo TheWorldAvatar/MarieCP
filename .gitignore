@@ -31,6 +31,7 @@ evaluation/data/merged_tll/*
 **/competency_runs/*.md
 !**/competency_runs/.gitignore
 **/workflow_runs/*.json
+**/workflow_runs/*.ndjson
 !**/workflow_runs/.gitignore
 **/headless_runs/*.json
 **/headless_runs/*.md
@@ -42,9 +43,24 @@ evaluation/data/merged_tll/*
 **/competency_eval_results.*
 **/competency_eval_run.log
 
+# Demo audit / analysis outputs
+demos/audit_runs/
+data/demo_analysis.json
+
+# Test / tooling caches
+.pytest_cache/
+
 # OS
 .DS_Store
 Thumbs.db
+
+# Mirrored TWA demo static assets (download with python -m demos.mirror)
+demos/static/
+
+# Official Marie Next.js frontend (clone with python -m demos.setup_marie_frontend)
+vendor/TheWorldAvatar/
+vendor/**/node_modules/
+.venv-wsl/
 
 # Archives (use extracted source in repo instead)
 *.rar
