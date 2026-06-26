@@ -36,7 +36,7 @@ Edit secrets if needed:
 
 ```bash
 nano ~/mariecp/.env   # REMOTE_API_KEY, FLASK_SECRET_KEY
-docker compose -f docker/compose.demo.yml -p mariecp-demo up -d --build
+docker compose --env-file .env -f docker/compose.demo.yml -p mariecp-demo up -d --build
 ```
 
 ## 3. nginx (www.theworldavatar.io)
@@ -52,18 +52,18 @@ curl -s http://127.0.0.1:3001/health/cache | python3 -m json.tool
 
 ```bash
 cd ~/mariecp && git pull
-docker compose -f docker/compose.demo.yml -p mariecp-demo up -d --build
+docker compose --env-file .env -f docker/compose.demo.yml -p mariecp-demo up -d --build
 ```
 
 ## 5. Manage
 
 ```bash
-docker compose -f docker/compose.demo.yml -p mariecp-demo ps
-docker compose -f docker/compose.demo.yml -p mariecp-demo logs -f mariecp-demo
+docker compose --env-file .env -f docker/compose.demo.yml -p mariecp-demo ps
+docker compose --env-file .env -f docker/compose.demo.yml -p mariecp-demo logs -f mariecp-demo
 ```
 
 Stop demo only:
 
 ```bash
-docker compose -f docker/compose.demo.yml -p mariecp-demo down
+docker compose --env-file .env -f docker/compose.demo.yml -p mariecp-demo down
 ```

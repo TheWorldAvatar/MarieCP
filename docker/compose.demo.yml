@@ -9,6 +9,8 @@ name: mariecp-demo
 
 services:
   mariecp-demo:
+    env_file:
+      - ../.env
     build:
       context: ..
       dockerfile: docker/demo/Dockerfile
@@ -25,8 +27,6 @@ services:
       DEMO_AUTO_OFFLINE: "${DEMO_AUTO_OFFLINE:-true}"
       DEMO_FORCE_REFRESH: "${DEMO_FORCE_REFRESH:-false}"
       DEMO_MIRROR_ON_START: "${DEMO_MIRROR_ON_START:-1}"
-      REMOTE_BASE_URL: "${REMOTE_BASE_URL:-}"
-      REMOTE_API_KEY: "${REMOTE_API_KEY:-}"
       DEMO_LLM_MODEL: "${DEMO_LLM_MODEL:-gpt-4o}"
       FLASK_SECRET_KEY: "${FLASK_SECRET_KEY:-dev-secret}"
     volumes:

@@ -3,6 +3,9 @@ set -euo pipefail
 
 cd /app
 
+export OPENAI_BASE_URL="${OPENAI_BASE_URL:-${REMOTE_BASE_URL:-}}"
+export OPENAI_API_KEY="${OPENAI_API_KEY:-${REMOTE_API_KEY:-}}"
+
 if [[ "${DEMO_MIRROR_ON_START:-1}" == "1" ]]; then
   if [[ ! -f demos/static/zaha/index.html ]]; then
     echo "==> Mirroring Zaha static assets from theworldavatar.io"

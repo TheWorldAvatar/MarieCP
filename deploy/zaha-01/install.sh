@@ -52,6 +52,7 @@ REMOTE_BASE_URL=https://openrouter.ai/api/v1
 REMOTE_API_KEY=REPLACE_ME
 DEMO_LLM_MODEL=gpt-4o
 FLASK_SECRET_KEY=change-me-in-production
+MARIECP_DATA=/home/xz378/mini_marie_data/data
 EOF
 fi
 
@@ -119,9 +120,9 @@ Deployed. Only stack 'mariecp-demo' was started/restarted.
 
 Manage:
   cd ${REPO_DIR}
-  docker compose -f docker/compose.demo.yml -p mariecp-demo ps
-  docker compose -f docker/compose.demo.yml -p mariecp-demo logs -f
-  docker compose -f docker/compose.demo.yml -p mariecp-demo up -d --build   # upgrade
+  docker compose --env-file .env -f docker/compose.demo.yml -p mariecp-demo ps
+  docker compose --env-file .env -f docker/compose.demo.yml -p mariecp-demo logs -f
+  docker compose --env-file .env -f docker/compose.demo.yml -p mariecp-demo up -d --build   # upgrade
 
 Next: merge deploy/zaha-01/nginx-mariecp-demo.conf on www.theworldavatar.io
       (upstream 127.0.0.1:${BIND_PORT})
