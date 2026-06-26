@@ -207,10 +207,15 @@ def filter_rows(
     resolve_fn = resolve or (lambda v, _vars: v)
     clauses: List[Dict[str, Any]] = []
     for raw in normalize_filters(spec):
+        value = resolve_fn(raw.get("value"), variables)
+        if value is None or (isinstance(value, str) and not str(value).strip()):
+            op = _norm_op(raw.get("op"))
+            if op not in ("empty", "not_empty"):
+                continue
         clause = {
             "field": raw.get("field", ""),
             "op": raw.get("op", "eq"),
-            "value": resolve_fn(raw.get("value"), variables),
+            "value": value,
         }
         clauses.append(clause)
 
@@ -272,3 +277,23 @@ def run_filter_rows_transform(
         "input": spec,
         "error": None,
     }
+
+
+def filter_row_pool_text(input_tsv: str, filters_json: str, *, logic: str = "and") -> str:
+    """MCP helper: filter a TSV row pool with generic filter_rows clauses."""
+    import json
+
+    from mini_marie.marie.chemistry.sparql import format_tsv, parse_tsv
+
+    rows = parse_tsv(input_tsv)
+    if not rows:
+        return "No results"
+    raw = json.loads(filters_json or "[]")
+    if isinstance(raw, dict):
+        spec = raw
+    else:
+        spec = {"logic": logic, "filters": raw}
+    if "logic" not in spec:
+        spec["logic"] = logic
+    filtered = filter_rows(rows, spec, {})
+    return format_tsv(filtered)
