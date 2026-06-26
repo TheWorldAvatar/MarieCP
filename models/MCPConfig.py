@@ -26,11 +26,14 @@ class MCPConfig:
 
 
     async def is_docker_running(self):
-        process = await asyncio.create_subprocess_exec(
-            'docker', 'info',
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
+        try:
+            process = await asyncio.create_subprocess_exec(
+                'docker', 'info',
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+        except FileNotFoundError:
+            return False
         stdout, stderr = await process.communicate()
         return process.returncode == 0
 

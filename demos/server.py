@@ -74,6 +74,8 @@ app = Flask(
     template_folder=str(Path(__file__).resolve().parent / "templates"),
 )
 _loop = asyncio.new_event_loop()
+_loop_thread: threading.Thread | None = None
+_loop_lock = threading.Lock()
 
 if os.environ.get("MARIE_FRONTEND_DEV", "").lower() in {"1", "true", "yes"}:
     from flask_cors import CORS
@@ -82,15 +84,25 @@ if os.environ.get("MARIE_FRONTEND_DEV", "").lower() in {"1", "true", "yes"}:
 
 
 def _ensure_loop_thread() -> None:
+    global _loop_thread
+    if _loop.is_running():
+        return
+    with _loop_lock:
+        if _loop.is_running():
+            return
+        if _loop_thread and _loop_thread.is_alive():
+            return
+
     def _run() -> None:
         asyncio.set_event_loop(_loop)
         _loop.run_forever()
 
-    t = threading.Thread(target=_run, daemon=True)
-    t.start()
+    _loop_thread = threading.Thread(target=_run, daemon=True)
+    _loop_thread.start()
 
 
 def _run_async(coro):
+    _ensure_loop_thread()
     return asyncio.run_coroutine_threadsafe(coro, _loop).result()
 
 
@@ -228,22 +240,35 @@ def health():
 
 @app.get("/health/cache")
 def health_cache():
+    payload: dict = {
+        "status": "ok",
+        "data_dir": str(data_dir()),
+        "mini_marie_cache_root": str(mini_marie_cache_root()),
+    }
+    errors: dict[str, str] = {}
+
+    for name, collector in (
+        ("ontospecies", ontospecies_cache_status),
+        ("ontozeolite", ontozeolite_cache_status),
+    ):
+        try:
+            payload.update(collector())
+        except Exception as exc:
+            errors[name] = str(exc)
+
     try:
-        payload: dict = {
-            "status": "ok",
-            "data_dir": str(data_dir()),
-            "mini_marie_cache_root": str(mini_marie_cache_root()),
-        }
-        payload.update(ontospecies_cache_status())
-        payload.update(ontozeolite_cache_status())
         from mini_marie.zaha.sg_old.ontop_operations import get_sg_ontop_cache_status
 
         sg_status = get_sg_ontop_cache_status()
         if sg_status:
             payload["sg_ontop"] = sg_status[0]
-        return jsonify(payload)
     except Exception as exc:
-        return jsonify({"status": "error", "detail": str(exc)}), 500
+        errors["sg_ontop"] = str(exc)
+
+    if errors:
+        payload["status"] = "partial"
+        payload["errors"] = errors
+    return jsonify(payload)
 
 
 @app.get("/demos/marie/api/ontospecies/chemical-classes")
