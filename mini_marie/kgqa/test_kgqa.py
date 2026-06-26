@@ -41,7 +41,7 @@ def test_match_catalog_exact_by_mq_prefix():
 
 @pytest.mark.skipif(not _HAS_LLM, reason="LLM routing requires REMOTE_API_KEY")
 def test_router_mof_competency_question():
-    route = _route_async("Average and variance PLD of UiO-66")
+    route = _route_async("What are the average and variance of the pore limiting diameter for UiO-66?")
     assert "mof-twa" in route.mcp_servers
     assert route.catalog_entry is not None
     assert route.catalog_entry.id == "CQ01_PLD_UIO66"

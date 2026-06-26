@@ -21,7 +21,7 @@ from mini_marie.kgqa.mcp_router import route_question
 from mini_marie.kgqa.offline_runner import replay_offline
 from mini_marie.kgqa.recording_utils import extract_recording_info
 
-DEFAULT_QUESTION = "Average and variance PLD of UiO-66"
+DEFAULT_QUESTION = "What are the average and variance of the pore limiting diameter for UiO-66?"
 
 
 async def run_full_cycle(question: str = DEFAULT_QUESTION) -> None:

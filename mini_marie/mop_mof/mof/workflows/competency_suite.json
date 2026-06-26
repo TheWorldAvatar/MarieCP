@@ -6,12 +6,12 @@
   "workflows": [
     {
       "id": "CQ01_PLD_UIO66",
-      "question": "Average and variance PLD of UiO-66",
+      "question": "What are the average and variance of the pore limiting diameter for UiO-66?",
       "steps": [{ "tool": "get_pld_stats_by_mof_name", "args": { "mof_name": "UiO-66" } }]
     },
     {
       "id": "CQ02_ZN_SOURCES",
-      "question": "Zn MOFs by source database",
+      "question": "Which Zn-containing MOFs are available, grouped by source database?",
       "steps": [
         {
           "tool": "get_mofs_by_metal",
@@ -21,7 +21,7 @@
     },
     {
       "id": "CQ02B_ZN_CORE_FILTER",
-      "question": "Zn MOFs in CoRE databases (list + filter_rows), then source stats for comparison",
+      "question": "Which Zn-containing MOFs come from CoRE databases, and how do their source statistics compare with all Zn MOFs?",
       "metal": "Zn",
       "db_substring": "core",
       "steps": [
@@ -53,7 +53,7 @@
     },
     {
       "id": "CQ02C_ZN_CORE_GROUP_RESIDUAL",
-      "question": "Zn CoRE MOFs: filter + GROUP BY sourcedb (local) + residual total MOF count (SPARQL)",
+      "question": "Among Zn-containing MOFs from CoRE databases, how many come from each source database, and how does that compare with the total MOF count?",
       "metal": "Zn",
       "db_substring": "core",
       "steps": [
@@ -95,7 +95,7 @@
     },
     {
       "id": "CQ03_CU_EXPERIMENTAL",
-      "question": "Experimental Cu MOF count",
+      "question": "How many experimental Cu-containing MOFs are recorded?",
       "steps": [
         {
           "tool": "get_mofs_by_metal",
@@ -105,24 +105,24 @@
     },
     {
       "id": "CQ04_SYNTHESIS_UIO66",
-      "question": "UiO-66 synthesis routes",
+      "question": "What synthesis routes are recorded for UiO-66?",
       "steps": [
         { "tool": "get_synthesis_by_mof_name", "args": { "mof_name": "uio-66" } }
       ]
     },
     {
       "id": "CQ05_IDENTITY_DUT67",
-      "question": "DUT-67 identity (space group, sources)",
+      "question": "What is the identity of DUT-67, including its space group and source databases?",
       "steps": [{ "tool": "get_mof_identity_by_name", "args": { "mof_name": "DUT-67" } }]
     },
     {
       "id": "CQ06_TOPOLOGY_ZIF8",
-      "question": "ZIF-8 topology",
+      "question": "What topology is recorded for ZIF-8?",
       "steps": [{ "tool": "get_mof_identity_by_name", "args": { "mof_name": "ZIF-8" } }]
     },
     {
       "id": "CQ07_SAME_TOPO_ZIF8",
-      "question": "MOFs with same topology as ZIF-8 (probe + offline local join)",
+      "question": "Which MOFs have the same topology as ZIF-8?",
       "steps": [
         { "tool": "get_mof_identity_by_name", "args": { "mof_name": "ZIF-8" } },
         {
@@ -154,12 +154,12 @@
     },
     {
       "id": "CQ08_LINKER_HKUST",
-      "question": "HKUST-1 linker SMILES",
+      "question": "What linker SMILES are recorded for HKUST-1?",
       "steps": [{ "tool": "get_linkers_by_mof_name", "args": { "mof_name": "HKUST-1" } }]
     },
     {
       "id": "CQ09_HYPO_MIL53",
-      "question": "Hypothetical MOFs same topology as MIL-53",
+      "question": "How many hypothetical MOFs have the same topology as MIL-53?",
       "steps": [
         {
           "tool": "count_hypothetical_same_topology_as",
@@ -169,57 +169,57 @@
     },
     {
       "id": "CQ10_EXP_PCU",
-      "question": "Experimental pcu MOF count",
+      "question": "How many experimental MOFs have pcu topology?",
       "steps": [{ "tool": "count_experimental_by_topology", "args": { "topology": "pcu" } }]
     },
     {
       "id": "CQ11_PORE_HKUST",
-      "question": "HKUST-1 pore metrics",
+      "question": "What pore metrics are recorded for HKUST-1?",
       "steps": [{ "tool": "get_pore_metrics_by_mof_name", "args": { "mof_name": "HKUST-1" } }]
     },
     {
       "id": "CQ12_GSA_2500",
-      "question": "MOFs with GSA >= 2500",
+      "question": "Which MOFs have a gravimetric surface area of at least 2500?",
       "steps": [{ "tool": "get_mofs_by_gsa_min", "args": { "min_gsa": 2500 } }]
     },
     {
       "id": "CQ13_DOI_MIL101",
-      "question": "MIL-101 publications",
+      "question": "Which publications are associated with MIL-101?",
       "steps": [{ "tool": "get_publications_by_mof_name", "args": { "mof_name": "mil-101" } }]
     },
     {
       "id": "CQ14_ASA_MIL53",
-      "question": "MIL-53 ASA",
+      "question": "What accessible surface area is recorded for MIL-53?",
       "steps": [{ "tool": "get_asa_by_mof_name", "args": { "mof_name": "mil-53" } }]
     },
     {
       "id": "CQ15_DENSITY_DUT67",
-      "question": "DUT-67 density / pore stats",
+      "question": "What density and pore statistics are recorded for DUT-67?",
       "steps": [{ "tool": "get_pore_metrics_by_mof_name", "args": { "mof_name": "DUT-67" } }]
     },
     {
       "id": "CQ16_LCD_LT20",
-      "question": "MOFs with LCD < 20 Å",
+      "question": "Which MOFs have a largest cavity diameter below 20 Å?",
       "steps": [{ "tool": "get_mofs_by_lcd_max", "args": { "max_lcd_angstrom": 20 } }]
     },
     {
       "id": "CQ17_SOLVENTS",
-      "question": "Top synthesis solvents (excl. DMF/DMA/HF)",
+      "question": "What are the most common synthesis solvents after excluding DMF, DMA, and HF?",
       "steps": [{ "tool": "get_top_synthesis_solvents", "args": {} }]
     },
     {
       "id": "CQ_D1_ZR_COOH",
-      "question": "Zr + carboxylate linker MOFs",
+      "question": "Which Zr-containing MOFs have carboxylate linkers?",
       "steps": [{ "tool": "get_mofs_by_metal_and_linker", "args": {} }]
     },
     {
       "id": "CQ_D2_PCU_ALL",
-      "question": "pcu topology across sources",
+      "question": "How is pcu topology distributed across MOF source databases?",
       "steps": [{ "tool": "get_mofs_by_topology_all_sources", "args": { "topology": "pcu" } }]
     },
     {
       "id": "CQ_D3_ZIF8_REFCODES_SYNTH",
-      "question": "ZIF-8 refcodes then synthesis filtered by refcode (join_rows offline)",
+      "question": "Which ZIF-8 refcodes have matching synthesis records?",
       "steps": [
         {
           "tool": "get_refcodes_by_mof_name",
@@ -251,27 +251,27 @@
     },
     {
       "id": "CQ_D4_AQUEOUS",
-      "question": "Aqueous low-temperature syntheses",
+      "question": "Which MOFs have aqueous low-temperature synthesis routes?",
       "steps": [{ "tool": "get_aqueous_low_temp_syntheses", "args": {} }]
     },
     {
       "id": "CQ_D5_WATER_STABLE",
-      "question": "Water-stable MOFs",
+      "question": "Which MOFs are reported as water-stable?",
       "steps": [{ "tool": "get_water_stable_mofs", "args": {} }]
     },
     {
       "id": "CQ_D6_THERMAL",
-      "question": "Thermally stable MOFs",
+      "question": "Which MOFs are reported as thermally stable?",
       "steps": [{ "tool": "get_thermal_stable_mofs", "args": {} }]
     },
     {
       "id": "CQ_D7_BINARY_UPTAKE",
-      "question": "High binary gas uptake MOFs",
+      "question": "Which MOFs have high binary gas uptake?",
       "steps": [{ "tool": "get_high_binary_gas_uptake_mofs", "args": {} }]
     },
     {
       "id": "CQ_MORE03_NIST_ADSORPTION_CHEM",
-      "question": "NIST adsorption MOFs joined to CoRE chemistry and optional Tobassco functional groups (More Q3)",
+      "question": "Which NIST adsorption MOFs can be joined to CoRE chemistry records, with Tobassco functional groups when available?",
       "steps": [
         {
           "id": "warm_nist",
