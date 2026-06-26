@@ -107,7 +107,8 @@ def instruction_prompt():
         "   - mode='bbox': buildings in city centre window (falls back to top_height)\n\n"
         "**Scalable workflows (online probe → record → offline replay):**\n"
         "10. list_workflows - available workflow definitions\n"
-        "11. run_workflow_online(workflow_name) - execute with LIMIT 10, save recording, compact TSV response\n"
+        "11. run_workflow_online(workflow_name, parameters_json) - online probe LIMIT 10, "
+        "pass explicit JSON parameters (prefer city_ranked_buildings for ranking/filter/location questions)\n"
         "12. replay_workflow_offline(recording_path) - rerun without online limits, save full results\n\n"
         "**Workflow pattern:**\n"
         "- Online (agent): small LIMIT (~10) validates call chain; recording saved under workflow_runs/\n"
@@ -251,17 +252,26 @@ async def list_workflows_tool() -> str:
     name="run_workflow_online",
     description=(
         "Run a recorded workflow online with LIMIT 10 per SPARQL step. "
-        "Returns compact TSV + recording_path for replay_workflow_offline. "
-        "Workflow names from list_workflows."
+        "Pass parameters_json (JSON object) with workflow parameters the agent derived "
+        "from the user question — e.g. city, top_n, sort_field, sort_order, usage_type, "
+        "min_height_m, include_locations. Prefer workflow city_ranked_buildings for "
+        "generic ranking/filter/location questions. Returns compact TSV + recording_path."
     ),
 )
 async def run_workflow_online_tool(
     workflow_name: str,
     online_limit: int = MCP_ONLINE_LIMIT,
+    question: str = "",
+    parameters_json: str = "",
 ) -> str:
     if online_limit > 20:
         online_limit = MCP_ONLINE_LIMIT
-    return run_workflow_online(workflow_name, online_limit=online_limit)
+    return run_workflow_online(
+        workflow_name,
+        online_limit=online_limit,
+        question=question,
+        parameters_json=parameters_json,
+    )
 
 
 @twa_city_tool_logger

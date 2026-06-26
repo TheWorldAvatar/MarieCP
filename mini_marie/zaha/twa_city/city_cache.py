@@ -276,6 +276,7 @@ class CityCache:
         usage_contains: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         city_lc = _norm(city).lower()
+        fetch = max(int(n) * 20, int(n))
         if usage_contains:
             cur = self._conn.execute(
                 """
@@ -285,7 +286,7 @@ class CityCache:
                 ORDER BY height DESC
                 LIMIT ?
                 """,
-                (city_lc, f"%{_norm(usage_contains).lower()}%", int(n)),
+                (city_lc, f"%{_norm(usage_contains).lower()}%", fetch),
             )
         else:
             cur = self._conn.execute(
@@ -296,9 +297,11 @@ class CityCache:
                 ORDER BY height DESC
                 LIMIT ?
                 """,
-                (city_lc, int(n)),
+                (city_lc, fetch),
             )
-        return [dict(r) for r in cur]
+        rows = dedupe_rows_by_building([dict(r) for r in cur])
+        rows.sort(key=lambda r: _float_val(r.get("height")), reverse=True)
+        return rows[: max(1, int(n))]
 
     def local_all_heights(self, city: str) -> List[Dict[str, Any]]:
         city_lc = _norm(city).lower()
@@ -402,7 +405,7 @@ class CityCache:
                 """,
                 (city_lc, n, city_lc),
             )
-        return [dict(r) for r in cur]
+        return dedupe_rows_by_building([dict(r) for r in cur], rank_field="height")
 
     def local_locations_for_buildings(
         self,
@@ -609,6 +612,23 @@ def warm_atomic(
     if own:
         ck.close()
     return rows, meta
+
+
+def dedupe_rows_by_building(
+    rows: List[Dict[str, Any]],
+    *,
+    building_field: str = "building",
+    rank_field: str = "height",
+) -> List[Dict[str, Any]]:
+    """One row per building IRI; keep the row with the best rank_field value."""
+    seen: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        b = _norm(row.get(building_field))
+        if not b:
+            continue
+        if b not in seen or _float_val(row.get(rank_field)) >= _float_val(seen[b].get(rank_field)):
+            seen[b] = dict(row)
+    return list(seen.values())
 
 
 def _dedupe_buildings_by_height(pool: List[Dict[str, Any]]) -> List[str]:

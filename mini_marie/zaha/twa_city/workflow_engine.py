@@ -12,7 +12,7 @@ import traceback
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from mini_marie.zaha.twa_city.city_cache import CityCache, invoke_plan
+from mini_marie.zaha.twa_city.city_cache import CityCache, dedupe_rows_by_building, invoke_plan
 from mini_marie.cache_tiers import CacheMissError
 from mini_marie.probe_sequence import (
     build_probed_sequence,
@@ -64,8 +64,9 @@ def extract_from_step(spec: Dict[str, Any], step_result: Dict[str, Any]) -> Any:
         field = spec["field"]
         n = int(spec.get("n", 10))
         reverse = spec.get("order", "desc") == "desc"
+        unique = dedupe_rows_by_building(rows, rank_field=field)
         sorted_rows = sorted(
-            rows,
+            unique,
             key=lambda r: float(r.get(field) or 0),
             reverse=reverse,
         )
@@ -91,9 +92,10 @@ def run_transform_step(step_index: int, spec: Dict[str, Any], variables: Dict[st
         source_var = spec["input_variable"]
         rows = variables.get(source_var) or []
         n = int(resolve_value(spec.get("n", 10), variables))
-        field = spec["field"]
+        field = str(resolve_value(spec.get("field", "height"), variables))
+        order = str(resolve_value(spec.get("order", "desc"), variables))
         top_rows = extract_from_step(
-            {"pick": "top_n_by_field", "field": field, "n": n, "order": spec.get("order", "desc")},
+            {"pick": "top_n_by_field", "field": field, "n": n, "order": order},
             {"rows": rows},
         )
         out_field = spec.get("output_field", "building")
@@ -148,6 +150,22 @@ def run_local_join_step(
 ) -> Dict[str, Any]:
     join = spec["join"]
     started = time.perf_counter()
+    skip_unless = spec.get("skip_unless")
+    if skip_unless is not None:
+        if not resolve_value(skip_unless, variables):
+            return {
+                "step": step_index,
+                "step_type": "local_join",
+                "join": join,
+                "mode": mode,
+                "status": "skipped",
+                "summary": f"Skipped join {join} (skip_unless false)",
+                "rows": [],
+                "row_count": 0,
+                "elapsed_ms": 0,
+                "input": spec,
+                "error": None,
+            }
     rows: List[Dict[str, Any]] = []
     summary = ""
     city = resolve_value(spec.get("city", "$city"), variables)
@@ -159,8 +177,8 @@ def run_local_join_step(
         summary = f"Local top-{n} by height for {city}: {len(rows)} rows"
 
     elif join == "building_pool_from_cache":
-        rows = cache.local_all_heights(str(city))
-        summary = f"Local height pool for {city}: {len(rows)} rows"
+        rows = dedupe_rows_by_building(cache.local_all_heights(str(city)))
+        summary = f"Local height pool for {city}: {len(rows)} unique buildings"
 
     elif join == "locations_for_buildings_local":
         iris_var = spec.get("building_iris_variable", "top_building_iris")
@@ -189,7 +207,10 @@ def run_local_join_step(
             iris_list = [str(i) for i in iris if i]
         else:
             iris_list = [str(iris)]
-        rows = cache.local_buildings_with_locations_sql(str(city), iris_list)
+        rows = dedupe_rows_by_building(
+            cache.local_buildings_with_locations_sql(str(city), iris_list),
+            rank_field="height",
+        )
         summary = (
             f"SQL join height+location for {len(iris_list)} buildings in {city}: "
             f"{len(rows)} rows"
@@ -513,9 +534,11 @@ def run_workflow(
     Offline: replays `steps_override` / recording sequence from cache only.
     """
     del offline_cap  # deprecated
-    variables: Dict[str, Any] = dict(seed_variables or workflow.get("seed_variables") or {})
-    variables["city"] = workflow.get("city", variables.get("city"))
-    variables["top_n"] = workflow.get("top_n", variables.get("top_n", DEFAULT_ONLINE_LIMIT))
+    variables: Dict[str, Any] = dict(seed_variables or workflow.get("variables") or {})
+    if "city" not in variables and workflow.get("city"):
+        variables["city"] = workflow.get("city")
+    if "top_n" not in variables:
+        variables["top_n"] = workflow.get("top_n", variables.get("top_n", DEFAULT_ONLINE_LIMIT))
     if workflow.get("usage_type") is not None:
         variables["usage_type"] = workflow.get("usage_type")
     for scalar in (
@@ -608,6 +631,16 @@ def run_workflow(
         cache.close()
 
     elapsed_ms = round((time.perf_counter() - started) * 1000)
+    from mini_marie.row_annotations import stamp_variables
+
+    params = {
+        k: v for k, v in variables.items() if not str(k).startswith("online_limits.")
+    }
+    stamp_variables(
+        variables,
+        parameters=params,
+        stamp_keys=workflow.get("stamp_row_columns") or ["city"],
+    )
     result: Dict[str, Any] = {
         "workflow_id": workflow.get("id"),
         "workflow_name": workflow_name,

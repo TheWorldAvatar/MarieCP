@@ -1,0 +1,77 @@
+{
+  "id": "WF_CITY_RANKED_BUILDINGS",
+  "title": "Ranked city buildings from cache",
+  "description": "Parameterized: probe → cached pool → filter_rows → top_n_by_field → optional locations",
+  "parameters": {
+    "city": { "type": "string", "required": true },
+    "top_n": { "type": "integer", "default": 10 },
+    "sort_field": { "type": "string", "default": "height" },
+    "sort_order": { "type": "string", "default": "desc" },
+    "usage_type": { "type": "string", "default": null },
+    "min_height_m": { "type": "number", "default": null, "comparator": "gte", "order": 1 },
+    "include_locations": { "type": "boolean", "default": false },
+    "row_annotations": {
+      "type": "object",
+      "default": null,
+      "description": "Extra columns on each result row, e.g. {\"city\": \"bremen\"}"
+    }
+  },
+  "stamp_row_columns": ["city"],
+  "online_limit": 10,
+  "steps": [
+    {
+      "id": "online_probe",
+      "tool": "list_buildings_with_height",
+      "args": { "city": "$city" },
+      "extract": { "probe_pool": { "pick": "all_rows" } }
+    },
+    {
+      "id": "offline_pool",
+      "type": "local_join",
+      "join": "building_pool_from_cache",
+      "city": "$city",
+      "output_variable": "building_pool",
+      "offline_only": true
+    },
+    {
+      "id": "parameter_filters",
+      "type": "transform",
+      "transform": "filter_rows",
+      "name": "parameter_filters",
+      "input_variable": "building_pool",
+      "output_variable": "rank_pool",
+      "also_store_rows": "rank_pool",
+      "logic": "and",
+      "filters": [
+        { "field": "height", "op": "gte", "value": "$min_height_m" },
+        { "field": "usage_type", "op": "icontains", "value": "$usage_type" }
+      ],
+      "offline_only": true
+    },
+    {
+      "id": "rank",
+      "type": "transform",
+      "transform": "top_n_by_field",
+      "input_variable": "rank_pool",
+      "field": "$sort_field",
+      "n": "$top_n",
+      "order": "$sort_order",
+      "output_field": "building",
+      "output_variable": "top_building_iris",
+      "also_store_rows": "top_building_rows",
+      "offline_only": true
+    },
+    {
+      "id": "join_locations",
+      "type": "local_join",
+      "join": "buildings_with_locations_sql",
+      "city": "$city",
+      "building_iris_variable": "top_building_iris",
+      "output_variable": "buildings_with_wkt",
+      "skip_unless": "$include_locations",
+      "offline_only": true
+    }
+  ],
+  "answer_variable": "top_building_rows",
+  "final_summary": "Top $top_n buildings in $city by $sort_field; rows in top_building_rows (locations in buildings_with_wkt when warmed)."
+}

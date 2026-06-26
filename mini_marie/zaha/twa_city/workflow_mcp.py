@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from mini_marie.zaha.twa_city.twa_city_operations import format_results_as_tsv
+from mini_marie.workflow_parameters import parse_parameters_json, resolve_workflow_parameters, workflow_with_parameters
 from mini_marie.zaha.twa_city.workflow_engine import (
     discover_workflow_catalog,
     load_run,
@@ -50,6 +51,7 @@ def format_workflow_mcp_response(result: Dict[str, Any], recording_path: Path) -
         f"workflow_id\t{result.get('workflow_id')}",
         f"workflow_name\t{result.get('workflow_name', '')}",
         f"city\t{result.get('city')}",
+        f"resolved_parameters\t{result.get('resolved_parameters') or {}}",
         f"online_limit\t{result.get('online_limit')}",
         f"offline_cap\t{result.get('offline_cap')}",
         f"elapsed_ms\t{result.get('elapsed_ms')}",
@@ -111,8 +113,14 @@ def format_workflow_mcp_response(result: Dict[str, Any], recording_path: Path) -
 def run_workflow_online(
     workflow_name: str,
     online_limit: int = MCP_ONLINE_LIMIT,
+    *,
+    question: str = "",
+    parameters_json: str = "",
 ) -> str:
     workflow = load_workflow(workflow_name)
+    overrides = parse_parameters_json(parameters_json)
+    parameters = resolve_workflow_parameters(workflow, question, overrides)
+    workflow = workflow_with_parameters(workflow, parameters)
     workflow["online_limit"] = online_limit
     if workflow.get("online_limits"):
         workflow["online_limits"] = {k: online_limit for k in workflow["online_limits"]}
@@ -123,6 +131,7 @@ def run_workflow_online(
         workflow_name=workflow_name,
         use_cache=True,
     )
+    result["resolved_parameters"] = parameters
     path = save_run(result)
     return format_workflow_mcp_response(result, path)
 
@@ -139,6 +148,14 @@ def replay_workflow_offline(
         workflow_name=workflow_name,
         workflow_path=Path(workflow_path) if workflow_path else None,
     )
+    parameters = (
+        recorded.get("resolved_parameters")
+        or recorded.get("seed_variables")
+        or {}
+    )
+    if parameters:
+        workflow = workflow_with_parameters(workflow, parameters)
+    seed = dict(workflow.get("variables") or parameters or {})
     result = run_workflow(
         workflow,
         mode="offline",
@@ -146,8 +163,10 @@ def replay_workflow_offline(
         workflow_name=workflow_name or recorded.get("workflow_name"),
         use_cache=True,
         force_refresh=False,
+        seed_variables=seed,
     )
     result["replayed_from"] = str(Path(recording_path).resolve())
     result["workflow_source"] = _source
+    result["resolved_parameters"] = parameters
     path = save_run(result)
     return format_workflow_mcp_response(result, path)
