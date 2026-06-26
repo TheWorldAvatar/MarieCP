@@ -2,7 +2,7 @@
 
 ## Purpose
 
-mini_marie bridges **large SPARQL knowledge graphs** and **LLM agents** that have limited context and latency budgets. Instead of exposing raw SPARQL, each TWA exposes:
+mini_marie bridges **large SPARQL knowledge graphs** (from [The World Avatar (TWA)](https://theworldavatar.io/)) and **LLM agents** that have limited context and latency budgets. Instead of exposing raw SPARQL, each TWA domain module exposes:
 
 - **Atomic MCP tools** — Single-purpose queries with built-in `LIMIT` and stable column shapes.
 - **Workflow definitions** — JSON step lists that chain atomics, transforms, and optional residual SPARQL.

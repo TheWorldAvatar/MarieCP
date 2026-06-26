@@ -1,6 +1,6 @@
 # MarieCP
 
-Lightweight runtime for querying **Typed World Assets (TWAs)** over knowledge graphs via **MCP (Model Context Protocol)** tools.
+Lightweight runtime for querying **[The World Avatar (TWA)](https://theworldavatar.io/)** knowledge graphs via **MCP (Model Context Protocol)** tools.
 
 The `mini_marie` Python package covers three domains:
 

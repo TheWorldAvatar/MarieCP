@@ -1,6 +1,6 @@
 # mini_marie — Technical documentation
 
-**mini_marie** is a lightweight runtime for querying **Typed World Assets (TWAs)** over knowledge graphs via **MCP (Model Context Protocol)** tools. Code is organized into three domain folders:
+**mini_marie** is a lightweight runtime for querying **[The World Avatar (TWA)](https://theworldavatar.io/)** knowledge graphs via **MCP (Model Context Protocol)** tools. Code is organized into three domain folders:
 
 | Domain | Folder | Contents | MCP config |
 |--------|--------|----------|------------|
