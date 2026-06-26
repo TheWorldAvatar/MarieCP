@@ -10,7 +10,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
 
-COMPOSE=(docker compose --env-file configs/demo_docker.env -f docker/compose.demo.yml -p mariecp-demo)
+COMPOSE=(docker compose --env-file configs/demo_docker.env --env-file configs/demo_publish.env -f docker/compose.demo.yml -p mariecp-demo)
 PORT="${MARIECP_PORT:-3001}"
 PUBLISH_HOST="${MARIECP_PUBLISH_HOST:-0.0.0.0}"
 DATA="${MARIECP_DATA:-}"

@@ -23,7 +23,7 @@ BRANCH="${MARIECP_BRANCH:-main}"
 DATA_DIR="${MARIECP_DATA:-${MINI_MARIE_DATA_DIR:-/home/xz378/mini_marie_data/data}}"
 BIND_PORT="${MARIECP_PORT:-3001}"
 PUBLISH_HOST="${MARIECP_PUBLISH_HOST:-0.0.0.0}"
-COMPOSE=(docker compose --env-file configs/demo_docker.env -f docker/compose.demo.yml -p mariecp-demo)
+COMPOSE=(docker compose --env-file configs/demo_docker.env --env-file configs/demo_publish.env -f docker/compose.demo.yml -p mariecp-demo)
 
 echo "==> MarieCP demo install (Docker)"
 echo "    repo:    ${REPO_DIR} (${BRANCH})"

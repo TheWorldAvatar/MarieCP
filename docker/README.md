@@ -62,6 +62,6 @@ nginx upstream: `127.0.0.1:3001` (see `deploy/zaha-01/nginx-mariecp-demo.conf`).
 | Cache mount | `MARIECP_DATA` → `/data` in container |
 | Host port | `MARIECP_PORT` (default **3001**) |
 | Bind address | `MARIECP_PUBLISH_HOST` (default **0.0.0.0**) |
-| Config | `configs/demo_docker.env` + `.env` secrets |
+| Config | `configs/demo_docker.env` + `configs/demo_publish.env` + `.env` secrets |
 
 Does **not** run `docker compose down` without `-p mariecp-demo`, does not prune, does not restart unrelated containers.

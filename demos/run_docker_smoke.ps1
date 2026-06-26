@@ -14,7 +14,13 @@ $ErrorActionPreference = "Stop"
 $Repo = Split-Path $PSScriptRoot -Parent
 Set-Location $Repo
 
-$Compose = @("compose", "--env-file", "configs/demo_docker.env", "-f", "docker/compose.demo.yml", "-p", "mariecp-demo")
+$Compose = @(
+    "compose",
+    "--env-file", "configs/demo_docker.env",
+    "--env-file", "configs/demo_publish.env",
+    "-f", "docker/compose.demo.yml",
+    "-p", "mariecp-demo"
+)
 
 if ($Down) {
     docker @Compose down
