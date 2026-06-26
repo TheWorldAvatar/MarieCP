@@ -11,13 +11,13 @@ REPO = Path(__file__).resolve().parents[1]
 load_demo_env()
 
 
-def test_cache_paths_point_at_d_drive():
+def test_cache_paths_configured():
     from mini_marie.cache_paths import data_dir, mini_marie_cache_root
 
     data = data_dir()
     cache = mini_marie_cache_root()
-    assert "mini_marie_data" in str(data).replace("\\", "/").lower()
     assert cache.name == "mini_marie_cache"
+    assert data == cache.parent, f"expected cache under data dir, got {data} vs {cache.parent}"
     db = cache / "chemistry" / "chemistry_cache.sqlite"
     assert db.is_file(), f"missing {db}"
 
@@ -104,7 +104,7 @@ def test_zeolitic_material_search():
 
 
 if __name__ == "__main__":
-    test_cache_paths_point_at_d_drive()
+    test_cache_paths_configured()
     test_uses_and_classes()
     test_species_search_iupac_api()
     test_species_search_smiles()
