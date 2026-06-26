@@ -11,6 +11,7 @@
 #   SKIP_MIRROR=1          # skip python -m demos.mirror
 #   INSTALL_SYSTEMD=1      # sudo cp + enable mariecp-demo.service
 #   MARIECP_PORT=8080        # loopback port (must match nginx upstream)
+#   USE_CONDA=1              # default: conda env at .conda-env (no apt)
 #
 # Safety: does NOT run docker, docker-compose, or reload nginx. Only installs
 # the dedicated mariecp-demo systemd unit when INSTALL_SYSTEMD=1.
@@ -75,12 +76,21 @@ EOF
   echo "    Edit: ${REPO_DIR}/.env"
 fi
 
-echo "==> Python venv + dependencies"
+echo "==> Python env + dependencies (conda, no apt)"
+export USE_CONDA="${USE_CONDA:-1}"
 export INSTALL_KGQA=1
-bash mini_marie/scripts/setup_linux.sh
-# shellcheck disable=SC1091
-source .venv/bin/activate
+
+if [[ "${USE_CONDA}" == "1" ]]; then
+  rm -rf .venv
+  bash mini_marie/scripts/setup_conda.sh
+  export PATH="${REPO_DIR}/.conda-env/bin:${PATH}"
+else
+  bash mini_marie/scripts/setup_linux.sh
+  # shellcheck disable=SC1091
+  source .venv/bin/activate
+fi
 pip install -r requirements-demo.txt gunicorn
+chmod +x deploy/zaha-01/run_gunicorn.sh
 
 export PYTHONPATH="${REPO_DIR}"
 export MINI_MARIE_DATA_DIR="${DATA_DIR}"
@@ -129,7 +139,7 @@ if [[ "${INSTALL_SYSTEMD:-0}" == "1" ]]; then
   check_bind_port
   echo "==> Installing systemd unit (sudo) — mariecp-demo only, no Docker changes"
   tmp_unit="$(mktemp)"
-  sed "s/127.0.0.1:8080/127.0.0.1:${BIND_PORT}/" \
+  sed "s/MARIECP_BIND=127.0.0.1:8080/MARIECP_BIND=127.0.0.1:${BIND_PORT}/" \
     deploy/zaha-01/mariecp-demo.service > "${tmp_unit}"
   sudo cp "${tmp_unit}" /etc/systemd/system/mariecp-demo.service
   rm -f "${tmp_unit}"
@@ -145,7 +155,8 @@ else
 Manual next steps:
   1. Edit ${REPO_DIR}/.env (REMOTE_API_KEY required for QA/chat)
   2. Test interactively:
-       cd ${REPO_DIR} && source .venv/bin/activate
+       cd ${REPO_DIR}
+       export PATH=${REPO_DIR}/.conda-env/bin:\$PATH
        export PYTHONPATH=${REPO_DIR} MINI_MARIE_DATA_DIR=${DATA_DIR}
        gunicorn -w 2 -b 127.0.0.1:8080 --timeout 300 demos.server:app
   3. Enable service:

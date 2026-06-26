@@ -24,7 +24,7 @@ Update the nginx `upstream mariecp_demo` to match.
 |------|-------------|
 | Caches | `/home/xz378/mini_marie_data/data/mini_marie_cache/{sg_old,chemistry,twa_city}/` |
 | LLM key | `REMOTE_API_KEY` in `/home/xz378/mariecp/.env` (not committed) |
-| Python | 3.11+ |
+| Python | **Conda** env at `~/mariecp/.conda-env` (default; no `apt`) |
 | Outbound HTTPS | theworldavatar.io (mirror), OpenRouter/OpenAI (KGQA) |
 
 ## 1. Upload caches (from dev machine)
@@ -38,20 +38,27 @@ bash deploy/zaha-01/upload_caches.sh
 
 ## 2. Install app (on zaha-01)
 
-Debian/Ubuntu needs the venv OS package once (does not touch Docker):
-
-```bash
-sudo apt install -y python3.10-venv python3-pip
-```
+Uses a **repo-local conda env** (`.conda-env`) — no `apt install`, no system venv, no Docker changes.
 
 ```bash
 ssh xz378@zaha-01
+source ~/miniconda3/etc/profile.d/conda.sh   # or anaconda3 — adjust path if needed
 git clone https://github.com/TheWorldAvatar/MarieCP.git ~/mariecp   # first time only
 cd ~/mariecp
 git pull
-rm -rf .venv   # if a previous venv create failed halfway
+rm -rf .venv .conda-env   # clean failed/partial envs
 bash deploy/zaha-01/install.sh
 ```
+
+If conda is not installed yet (user-space only, no sudo):
+
+```bash
+wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh
+bash /tmp/miniconda.sh -b -p $HOME/miniconda3
+source $HOME/miniconda3/etc/profile.d/conda.sh
+```
+
+To use system venv instead: `USE_CONDA=0 bash deploy/zaha-01/install.sh` (needs `python3-venv`).
 
 Edit secrets:
 
