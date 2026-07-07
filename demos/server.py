@@ -111,9 +111,9 @@ def _marie_frontend_base() -> str:
     return marie_public_base().rstrip("/")
 
 
-def _elisa_frontend_url() -> str:
-    """External hybrid RAG UI (hosted QA deployment by default)."""
-    return os.environ.get("ELISA_FRONTEND_URL", "https://qa.theworldavatar.io").rstrip("/")
+def _elisa_frontend_base() -> str:
+    """Local Elisa UI (FastAPI on port 8000 by default)."""
+    return os.environ.get("ELISA_FRONTEND_URL", "http://127.0.0.1:8000").rstrip("/")
 
 
 def _render_demo_hub():
@@ -121,7 +121,7 @@ def _render_demo_hub():
         "hub.html",
         marie_url="/demos/marie-classic/",
         zaha_url="/demos/zaha/",
-        elisa_url=f"{_elisa_frontend_url()}/",
+        elisa_url="/demos/elisa/",
     )
 
 
@@ -405,6 +405,17 @@ def demo_hub_assets(subpath: str):
     return send_from_directory(HUB_ROOT, subpath)
 
 
+# --- Elisa (local RAG frontend redirect) ---
+
+
+@app.route("/demos/elisa/")
+@app.route("/demos/elisa/<path:subpath>")
+def elisa_frontend_redirect(subpath: str = ""):
+    base = _elisa_frontend_base()
+    target = f"{base}/{subpath}" if subpath else f"{base}/"
+    return redirect(target, code=302)
+
+
 # --- Marie UI (proxy to Next.js, or redirect when MARIE_FRONTEND_PROXY=0) ---
 
 
@@ -458,6 +469,7 @@ def marie_classic_static(subpath: str = ""):
 
 # --- static Zaha ---
 
+
 @app.route("/demos/zaha/")
 @app.route("/demos/zaha/<path:subpath>")
 def zaha_static(subpath: str = ""):
@@ -500,6 +512,7 @@ def main() -> None:
     if marie_proxy_enabled():
         print(f"  Marie upstream  {resolve_marie_upstream()}{marie_public_base()}/")
     print(f"  Zaha    http://{host}:{port}/demos/zaha/")
+    print(f"  Elisa   http://{host}:{port}/demos/elisa/  -> {_elisa_frontend_base()}/")
     print(f"  Marie API  http://{host}:{port}/demos/marie/api/")
     print(f"  Cache  {cache_root}")
     try:
