@@ -1,0 +1,28 @@
+{
+  "id": "WF_PIRMASENS_HEIGHT_FILTER",
+  "question": "Pirmasens buildings taller than a height threshold (list IRI+height, then filter_rows)",
+  "city": "pirmasens",
+  "min_height_m": 50,
+  "online_limit": 10,
+  "steps": [
+    {
+      "id": "list_pool",
+      "tool": "list_buildings_with_height",
+      "args": { "city": "$city" },
+      "extract": { "building_pool": { "pick": "all_rows" } }
+    },
+    {
+      "id": "filter_height",
+      "type": "transform",
+      "transform": "filter_rows",
+      "name": "height_threshold",
+      "input_variable": "building_pool",
+      "output_variable": "tall_buildings",
+      "also_store_rows": "tall_building_rows",
+      "filters": [
+        { "field": "height", "op": "gte", "value": "$min_height_m" }
+      ]
+    }
+  ],
+  "final_summary": "Pirmasens buildings with height >= $min_height_m (count in tall_building_rows)."
+}

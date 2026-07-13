@@ -5,7 +5,7 @@
 | Package | MCP server | Data |
 |---------|------------|------|
 | `mof/` | `mof-twa` | Remote OntoMOFs SPARQL (~850k MOFs) |
-| `mops/` | `twa-mops` | Local merged TTL (`evaluation/data/merged_tll`) |
+| `mops/` | `twa-mops` | Remote Blazegraph (`ontomops_ogm`) |
 
 Also includes `marie_agent.py` (LLM agent for MOP synthesis) and `webapp/` (Flask UI).
 
@@ -14,7 +14,9 @@ Also includes `marie_agent.py` (LLM agent for MOP synthesis) and `webapp/` (Flas
 ```bash
 python -m mini_marie.mop_mof.mof.main
 python -m mini_marie.mop_mof.mops.main
+python -m mini_marie.mop_mof.mops.probe_blazegraph
 python -m mini_marie.mop_mof.mof.run_competency_probe --workflow CQ06_TOPOLOGY_ZIF8
+python -m mini_marie.mop_mof.mops.warm_blazegraph_cache
 ```
 
 Config: `configs/mof_twa.json`, `configs/marie_twa.json`

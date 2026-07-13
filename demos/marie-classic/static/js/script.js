@@ -243,41 +243,139 @@ function renderScatterPlot(title, traces, parentElem, id) {
 
 
 
-function renderMap(title, wktText, parentElem, id) {
+function renderMap(title, wktText, parentElem, id, wktList) {
     const raster = new ol.layer.Tile({
         source: new ol.source.OSM()
     })
 
     const format = new ol.format.WKT()
-    const feature = format.readFeature(wktText, {
-        dataProjection: 'EPSG:4326',
-        featureProjection: 'EPSG:3857'
+    const wkts = (wktList && wktList.length) ? wktList : [wktText]
+    const features = []
+    const markerFeatures = []
+    wkts.filter(Boolean).forEach((text, idx) => {
+        let feature
+        try {
+            feature = format.readFeature(text, {
+                dataProjection: 'EPSG:4326',
+                featureProjection: 'EPSG:3857'
+            })
+        } catch (err) {
+            console.warn("Failed to parse WKT for map feature", idx, err)
+            return
+        }
+        features.push(feature)
+        // City-scale footprints are often only a few metres across and vanish
+        // after fitBounds; add a centroid marker so buildings stay visible.
+        const geom = feature.getGeometry()
+        if (geom) {
+            const extent = geom.getExtent()
+            const center = ol.extent.getCenter(extent)
+            const marker = new ol.Feature({
+                geometry: new ol.geom.Point(center),
+                label: String(idx + 1),
+            })
+            markerFeatures.push(marker)
+        }
+    })
+
+    const polygonStyle = new ol.style.Style({
+        stroke: new ol.style.Stroke({ color: '#c0392b', width: 2 }),
+        fill: new ol.style.Fill({ color: 'rgba(231, 76, 60, 0.45)' }),
+    })
+    const markerStyle = new ol.style.Style({
+        image: new ol.style.Circle({
+            radius: 7,
+            fill: new ol.style.Fill({ color: '#c0392b' }),
+            stroke: new ol.style.Stroke({ color: '#ffffff', width: 2 }),
+        }),
     })
 
     const vector = new ol.layer.Vector({
-        source: new ol.source.Vector({ features: [feature] })
+        source: new ol.source.Vector({ features: features }),
+        style: polygonStyle,
+    })
+    const markers = new ol.layer.Vector({
+        source: new ol.source.Vector({ features: markerFeatures }),
+        style: markerStyle,
     })
 
-    const [minx, miny, maxx, maxy] = feature.getGeometry().getExtent();
-    const centerx = (minx + maxx) / 2
-    const centery = (miny + maxy) / 2
+    const combined = ol.extent.createEmpty()
+    features.forEach(feature => {
+        ol.extent.extend(combined, feature.getGeometry().getExtent())
+    })
+    if (ol.extent.isEmpty(combined)) {
+        console.warn("Map has no drawable geometry")
+        return
+    }
+
+    const centerx = (combined[0] + combined[2]) / 2
+    const centery = (combined[1] + combined[3]) / 2
 
     let elem = document.createElement("div");
     elem.setAttribute("id", id)
     elem.setAttribute("class", "map")
+    if (title) {
+        const heading = document.createElement("h6")
+        heading.textContent = title
+        elem.appendChild(heading)
+    }
+    const mapTarget = document.createElement("div")
+    mapTarget.setAttribute("id", id + "-map")
+    mapTarget.setAttribute("class", "map")
+    mapTarget.style.height = "320px"
+    elem.appendChild(mapTarget)
     parentElem.appendChild(elem)
 
     setTimeout(() => {
         const map = new ol.Map({
-            layers: [raster, vector],
-            target: id,
+            layers: [raster, vector, markers],
+            target: id + "-map",
             view: new ol.View({
                 center: [centerx, centery],
                 zoom: 8,
             }),
         })
-        map.getView().fit(feature.getGeometry().getExtent(), map.getSize())
+        // Padding keeps markers away from the map edge after fit.
+        map.getView().fit(combined, {
+            size: map.getSize(),
+            padding: [40, 40, 40, 40],
+            maxZoom: 17,
+        })
     }, 0)
+}
+
+function renderEmbed(title, url, parentElem, id) {
+    let elem = document.createElement("div")
+    elem.id = id
+    elem.style.marginBottom = "1rem"
+    if (title) {
+        const heading = document.createElement("h6")
+        heading.textContent = title
+        elem.appendChild(heading)
+    }
+    const iframe = document.createElement("iframe")
+    iframe.src = url
+    iframe.title = title || "Visualisation"
+    iframe.style.width = "100%"
+    iframe.style.height = "420px"
+    iframe.style.border = "1px solid #ddd"
+    iframe.setAttribute("loading", "lazy")
+    elem.appendChild(iframe)
+    parentElem.appendChild(elem)
+}
+
+function renderChatbotMarkdown(container, text) {
+    if (!text) {
+        container.textContent = ""
+        return
+    }
+    if (typeof marked !== "undefined" && typeof DOMPurify !== "undefined") {
+        marked.setOptions({ breaks: true, gfm: true })
+        const html = marked.parse(text)
+        container.innerHTML = DOMPurify.sanitize(html)
+    } else {
+        container.textContent = text
+    }
 }
 
 const errorContainer = (function () {
@@ -340,7 +438,15 @@ const qaDataContainer = (function () {
                 } else if (item_type === "scatter_plot") {
                     renderScatterPlot(title = item["title"], traces = item["traces"], parentElem = elem, id = id)
                 } else if (item_type === "map") {
-                    renderMap(title = item["title"], wktText = item["wkt_crs84"], parentElem = elem, id = id)
+                    renderMap(
+                        title = item["title"],
+                        wktText = item["wkt_crs84"],
+                        parentElem = elem,
+                        id = id,
+                        wktList = item["wkt_list"]
+                    )
+                } else if (item_type === "embed") {
+                    renderEmbed(title = item["title"], url = item["url"], parentElem = elem, id = id)
                 } else {
                     console.log("Unexpected data item: ", item)
                 }
@@ -388,14 +494,16 @@ const chatbotResponseCard = (function () {
 
     let abortController = new AbortController()
     let streamInterrupted = false
+    let streamedText = ""
 
     async function streamChatbotResponseBodyReader(reader) {
         globalState.set("chatbotLatency", null)
+        streamedText = ""
 
         function pump({ done, value }) {
             if (done) {
-                // Do something with last chunk of data then exit reader
                 chatbotStopAnchor.style.display = "none"
+                renderChatbotMarkdown(chatbotResponsePara, streamedText.trim())
                 return;
             }
             // Otherwise do something here to process current chunk
@@ -414,10 +522,8 @@ const chatbotResponseCard = (function () {
                     }
 
                     if (datum !== null) {
-                        chatbotResponsePara.textContent += datum["content"]
-                        if (/\s/.test(chatbotResponsePara.textContent.charAt(0))) {
-                            chatbotResponsePara.textContent = chatbotResponsePara.textContent.trimStart()
-                        }
+                        streamedText += datum["content"]
+                        chatbotResponsePara.textContent = streamedText.trimStart()
                         globalState.set("chatbotLatency", datum["latency"])
                     }
                 }
@@ -434,14 +540,18 @@ const chatbotResponseCard = (function () {
     }
 
     // API calls
-    async function fetchChatbotResponseReader(question, data) {
+    async function fetchChatbotResponseReader(question, data, narrative) {
+        const payload = { question, data: JSON.stringify(data) }
+        if (narrative) {
+            payload.narrative = narrative
+        }
         return fetch("./chat", {
             method: "POST",
             headers: {
                 "Accept": "application/json",
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify({ question, data: JSON.stringify(data) }),
+            body: JSON.stringify(payload),
             signal: abortController.signal
         })
             .then(throwErrorIfNotOk)
@@ -452,6 +562,7 @@ const chatbotResponseCard = (function () {
         reset() {
             elem.style.display = "none"
             chatbotResponsePara.textContent = ""
+            streamedText = ""
             chatbotSpinnerSpan.style.display = "inline-block"
             chatbotStopAnchor.style.display = "inline"
 
@@ -459,9 +570,9 @@ const chatbotResponseCard = (function () {
             streamInterrupted = false
         },
 
-        async render(question, data) {
+        async render(question, data, narrative) {
             elem.style.display = "block"
-            return fetchChatbotResponseReader(question, data).then(streamChatbotResponseBodyReader)
+            return fetchChatbotResponseReader(question, data, narrative).then(streamChatbotResponseBodyReader)
         },
 
         // On-click callbaks
@@ -514,7 +625,7 @@ async function askQuestion() {
         qaMetadataContainer.render(results["metadata"])
         resultSection.style.display = "block"
         qaDataContainer.render(results["data"])
-        chatbotResponseCard.render(question, results["data"])
+        chatbotResponseCard.render(question, results["data"], results["narrative"])
     } catch (error) {
         console.log(error.toString())
         if (error instanceof HttpError) {

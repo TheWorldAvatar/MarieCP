@@ -102,14 +102,16 @@ class KgqaAgent:
                 )
             elif domain == "mops":
                 workflow_hint = (
-                    "\nMOP polyhedra question: use twa-mops and/or chemistry-ontomops tools only. "
+                    "\nMOP polyhedra question: use remote Blazegraph tools only "
+                    "(get_mops_by_outer_diameter_min, get_mops_by_cbu_formula, "
+                    "get_assembly_models_by_polyhedral_shape, get_mops_by_reference_doi). "
                     "Do NOT use mof-twa Metal-Organic Framework corpus tools."
                 )
             elif "twa-mops" in route.mcp_servers:
                 workflow_hint = (
-                    "\nMOP instance question: call twa-mops tools for synthesis recipes, CBU, CCDC, "
-                    "and polyhedra data. chemistry-ontomops only has T-box routing — do not stop at "
-                    "ontomops_instance_routing; query twa-mops for actual MOP individuals."
+                    "\nMOP question: call remote Blazegraph tools on twa-mops "
+                    "(geometry/CBU/provenance/DOI). Page-listed competency questions have direct routing. "
+                    "chemistry-ontomops mirrors the same remote tools."
                 )
             elif domain == "city" or "twa-city" in route.mcp_servers:
                 workflow_hint = (
@@ -159,7 +161,8 @@ Provide a clear, structured answer citing key numeric results from tool output.
                 f"{', '.join(schema.keys())}. "
                 "Compose parameters_json from the user question. "
                 "Use sort_field \"height\" (not measuredHeight). "
-                "Set include_locations true when the question asks where buildings are. "
+                "Set include_locations true when the question asks where buildings are or requests a footprint map. "
+                "Do not call generate_building_map for Zaha demo answers — use city_ranked_buildings with include_locations. "
                 "For multiple cities, call run_workflow_online once per city with its own parameters_json. "
                 "When the question asks to label rows (e.g. with city), set row_annotations in parameters_json "
                 "to the columns to add, e.g. {\"city\": \"bremen\"} (city is also auto-stamped from the city param). "

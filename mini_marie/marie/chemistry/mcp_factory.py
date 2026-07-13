@@ -34,7 +34,11 @@ def create_chemistry_mcp(namespace: str) -> FastMCP:
         elif namespace == "ontozeolite":
             extra = "\nOntoZeolite extension: query_zeolite_property (also uses oc: OntoCrystal)."
         elif namespace == "ontomops":
-            extra = "\nOntoMOPs: use ontomops_instance_routing; instance data on twa-mops/mof-twa."
+            extra = (
+                "\nOntoMOPs: chemistry Blazegraph has T-box only. "
+                "Use remote Blazegraph tools on this server or twa-mops "
+                "(get_mops_by_outer_diameter_min, get_mops_by_cbu_formula, etc.)."
+            )
         return (
             f"Chemistry KG namespace `{namespace}` ({meta['label']}).\n"
             f"SPARQL: https://theworldavatar.io/chemistry/blazegraph/namespace/{namespace}/sparql\n"

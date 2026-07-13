@@ -41,6 +41,8 @@ def seed_variables_from_workflow(workflow: Dict[str, Any]) -> Dict[str, Any]:
         "max_height_m",
         "min_height",
         "max_height",
+        "min_heat_kwh_per_m2",
+        "min_co2_savings",
         "usage_contains",
         "metal",
         "mof_name",
@@ -132,6 +134,21 @@ def collect_atomic_specs_from_workflow_dir(
         data = json.loads(path.read_text(encoding="utf-8"))
         workflows.append(data)
     return collect_atomic_specs_from_workflows(workflows, resolve=resolve)
+
+
+def is_resolved_warm_spec(spec: Dict[str, Any]) -> bool:
+    """False when workflow placeholders ($var) remain in args (not warmable as atomics)."""
+
+    def _unresolved(val: Any) -> bool:
+        if isinstance(val, str):
+            return "$" in val
+        if isinstance(val, list):
+            return any(_unresolved(x) for x in val)
+        if isinstance(val, dict):
+            return any(_unresolved(v) for v in val.values())
+        return False
+
+    return not _unresolved(spec.get("args") or {})
 
 
 def specs_missing_full_tier(

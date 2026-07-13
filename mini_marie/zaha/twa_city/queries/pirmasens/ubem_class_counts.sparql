@@ -1,0 +1,8 @@
+SELECT ?class (COUNT(?x) AS ?count)
+WHERE {
+  ?x a ?class .
+  FILTER(CONTAINS(STR(?class), "ontoubemmp"))
+}
+GROUP BY ?class
+ORDER BY DESC(?count)
+LIMIT 20

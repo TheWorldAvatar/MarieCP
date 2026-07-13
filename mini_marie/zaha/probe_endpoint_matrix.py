@@ -75,6 +75,7 @@ def main() -> int:
         "zaha_city_bremen": CITY_ENDPOINTS["bremen"] in working,
         "zaha_city_kl": CITY_ENDPOINTS["kaiserslautern"] in working,
         "mop_mof_3840": "http://68.183.227.15:3840/ontop/sparql/" in working,
+        "mop_blazegraph_3838": "http://68.183.227.15:3838/blazegraph/namespace/ontomops_ogm/sparql" in working,
         "zaha_sg_3838": any("174.138.23.221:3838" in u for u in working),
         "zaha_sg_3839": any("174.138.23.221:3839" in u for u in working),
     }

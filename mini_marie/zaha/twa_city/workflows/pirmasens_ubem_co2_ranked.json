@@ -1,0 +1,51 @@
+{
+  "id": "WF_PIRMASENS_UBEM_CO2_RANKED",
+  "title": "Ranked Pirmasens UBEM CO2 savings rows",
+  "description": "list_dabgeo_co2_savings → filter_rows → top_n_by_field",
+  "city": "pirmasens",
+  "parameters": {
+    "city": { "type": "string", "required": true },
+    "top_n": { "type": "integer", "default": 10 },
+    "sort_field": { "type": "string", "default": "co2_savings" },
+    "sort_order": { "type": "string", "default": "desc" },
+    "min_co2_savings": { "type": "number", "default": null, "comparator": "gte", "order": 1 }
+  },
+  "stamp_row_columns": ["city"],
+  "online_limit": 10,
+  "steps": [
+    {
+      "id": "online_probe",
+      "tool": "list_dabgeo_co2_savings",
+      "args": { "city": "$city" },
+      "extract": { "probe_pool": { "pick": "all_rows" } }
+    },
+    {
+      "id": "parameter_filters",
+      "type": "transform",
+      "transform": "filter_rows",
+      "name": "co2_threshold",
+      "input_variable": "probe_pool",
+      "output_variable": "rank_pool",
+      "also_store_rows": "rank_pool",
+      "filters": [
+        { "field": "co2_savings", "op": "gte", "value": "$min_co2_savings" }
+      ],
+      "offline_only": true
+    },
+    {
+      "id": "rank",
+      "type": "transform",
+      "transform": "top_n_by_field",
+      "input_variable": "rank_pool",
+      "field": "$sort_field",
+      "n": "$top_n",
+      "order": "$sort_order",
+      "output_field": "dab_building",
+      "output_variable": "top_dabgeo_iris",
+      "also_store_rows": "top_ubem_rows",
+      "offline_only": true
+    }
+  ],
+  "answer_variable": "top_ubem_rows",
+  "final_summary": "Top $top_n Pirmasens UBEM CO2 rows by $sort_field."
+}

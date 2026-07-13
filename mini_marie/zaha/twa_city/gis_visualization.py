@@ -25,6 +25,7 @@ MAPS_DIR = Path(__file__).resolve().parent / "maps"
 CITY_VIEW = {
     "bremen": {"center": [53.0793, 8.8017], "half_deg": 0.02},
     "kaiserslautern": {"center": [49.4431, 7.7681], "half_deg": 0.015},
+    "pirmasens": {"center": [49.2030, 7.6050], "half_deg": 0.02},
 }
 
 MAP_BUILDING_LIMIT = 25

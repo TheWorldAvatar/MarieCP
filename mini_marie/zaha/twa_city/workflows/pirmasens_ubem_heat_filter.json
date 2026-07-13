@@ -1,0 +1,28 @@
+{
+  "id": "WF_PIRMASENS_UBEM_HEAT_FILTER",
+  "question": "Pirmasens DABGEO buildings with annual heat supply above a threshold (list IRI+value, then filter_rows)",
+  "city": "pirmasens",
+  "min_heat_kwh_per_m2": 400,
+  "online_limit": 10,
+  "steps": [
+    {
+      "id": "list_heat_pool",
+      "tool": "list_dabgeo_heat_supply",
+      "args": { "city": "$city" },
+      "extract": { "heat_pool": { "pick": "all_rows" } }
+    },
+    {
+      "id": "filter_heat",
+      "type": "transform",
+      "transform": "filter_rows",
+      "name": "heat_threshold",
+      "input_variable": "heat_pool",
+      "output_variable": "high_heat_rows",
+      "also_store_rows": "high_heat_building_rows",
+      "filters": [
+        { "field": "heat_kwh_per_m2", "op": "gte", "value": "$min_heat_kwh_per_m2" }
+      ]
+    }
+  ],
+  "final_summary": "Pirmasens DABGEO rows with heat_kwh_per_m2 >= $min_heat_kwh_per_m2 (see high_heat_building_rows)."
+}

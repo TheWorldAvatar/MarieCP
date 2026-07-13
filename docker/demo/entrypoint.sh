@@ -11,6 +11,7 @@ if [[ "${DEMO_MIRROR_ON_START:-1}" == "1" ]]; then
     echo "==> Mirroring Zaha static assets from theworldavatar.io"
     python -m demos.mirror || echo "WARN: mirror failed; Zaha UI may be incomplete" >&2
   fi
+  python -m demos.patch_zaha_static || echo "WARN: Zaha static patch failed" >&2
 fi
 
 WORKERS="${MARIECP_WORKERS:-2}"

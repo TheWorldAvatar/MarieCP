@@ -23,7 +23,7 @@ TOOLS = {
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run TWA city TWA queries")
-    parser.add_argument("--city", required=True, choices=["bremen", "kaiserslautern", "kl"])
+    parser.add_argument("--city", required=True, choices=["bremen", "kaiserslautern", "kl", "pirmasens"])
     parser.add_argument(
         "--query",
         choices=list(TOOLS),

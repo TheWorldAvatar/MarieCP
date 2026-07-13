@@ -35,6 +35,7 @@ python -m mini_marie.zaha.twa_city.probe --endpoint http://localhost:PORT/ontop/
 |------|--------|
 | Bremen | `https://bremen.cmpg.io/ontop/sparql/` |
 | Kaiserslautern | `https://kaiserslautern.cmpg.io/ontop/sparql/` |
+| Pirmasens | `https://pirmasens.cmpg.io/ontop/sparql/` |
 
 Heavy `GROUP BY` queries may **504** on large graphs; use `01b_building_count.sparql` or narrow filters.
 

@@ -1,0 +1,12 @@
+PREFIX ubem: <http://www.theworldavatar.com/kg/ontoubemmp/>
+PREFIX om: <http://www.ontology-of-units-of-measure.org/resource/om-2/>
+SELECT
+  (COUNT(?rad) AS ?measure_count)
+  (MIN(?num) AS ?min_radiation)
+  (MAX(?num) AS ?max_radiation)
+  (AVG(?num) AS ?avg_radiation)
+WHERE {
+  ?rad a ubem:Radabshz .
+  ?rad om:hasValue ?val .
+  ?val om:hasNumericalValue ?num .
+}

@@ -546,6 +546,8 @@ def run_workflow(
         "max_height_m",
         "min_height",
         "max_height",
+        "min_heat_kwh_per_m2",
+        "min_co2_savings",
         "usage_contains",
     ):
         if workflow.get(scalar) is not None:
