@@ -74,6 +74,15 @@ def patch_html(text: str) -> str:
         text,
         flags=re.S,
     )
+    # Absolute /demos/zaha/static paths survive domain deploy and trailing-slash redirects.
+    text = re.sub(r'(href|src)="\./static/', r'\1="/demos/zaha/static/', text)
+    # Disable Cloudflare Rocket Loader on first-party demo scripts (edge injects it on TWA).
+    text = re.sub(
+        r'(<script\s+[^>]*src="/demos/zaha/static/[^"]+"[^>]*)(>)',
+        lambda m: m.group(1) + (' data-cfasync="false"' if 'data-cfasync=' not in m.group(1) else '') + m.group(2),
+        text,
+        flags=re.I,
+    )
     return text
 
 
@@ -127,6 +136,13 @@ def sync_shared_script(root: Path = ZAHA_ROOT) -> int:
     shutil.copy2(MARIE_CLASSIC_JS, dest)
     print(f"  synced shared script.js -> {dest.relative_to(root)}")
     count = 1
+    classic_root = Path(__file__).resolve().parent / "zaha-classic" / "static" / "js"
+    accordian_js = classic_root / "accordian.js"
+    if accordian_js.is_file():
+        accordian_dest = root / "static" / "js" / "accordian.js"
+        shutil.copy2(accordian_js, accordian_dest)
+        print(f"  synced accordian.js -> {accordian_dest.relative_to(root)}")
+        count += 1
     german_js = Path(__file__).resolve().parent / "marie-classic" / "static" / "js" / "german_city_questions.js"
     if german_js.is_file():
         german_dest = root / "static" / "js" / "german_city_questions.js"

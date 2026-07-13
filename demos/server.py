@@ -481,6 +481,12 @@ def marie_classic_static(subpath: str = ""):
 # --- static Zaha ---
 
 
+@app.route("/demos/zaha")
+def zaha_redirect():
+    """Canonical URL with trailing slash (relative ./static/ paths need it)."""
+    return redirect("/demos/zaha/", code=308)
+
+
 @app.route("/demos/zaha/")
 @app.route("/demos/zaha/<path:subpath>")
 def zaha_static(subpath: str = ""):
