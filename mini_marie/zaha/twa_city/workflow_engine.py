@@ -49,6 +49,28 @@ def resolve_value(value: Any, variables: Dict[str, Any]) -> Any:
     return value
 
 
+def _building_field_for_rows(rows: List[Dict[str, Any]]) -> str:
+    """UBEM/DABGEO pools use ``dab_building``; CityGML height pools use ``building``."""
+    if not rows:
+        return "building"
+    sample = rows[0]
+    if isinstance(sample, dict) and sample.get("dab_building"):
+        return "dab_building"
+    return "building"
+
+
+def _rows_from_variable(value: Any) -> List[Dict[str, Any]]:
+    """Normalize in-memory workflow variables to a row list."""
+    if isinstance(value, dict):
+        sample = value.get("sample")
+        if isinstance(sample, list):
+            return [row for row in sample if isinstance(row, dict)]
+        return []
+    if isinstance(value, list):
+        return [row for row in value if isinstance(row, dict)]
+    return []
+
+
 def extract_from_step(spec: Dict[str, Any], step_result: Dict[str, Any]) -> Any:
     rows: List[Dict[str, Any]] = step_result.get("rows") or []
     pick = spec.get("pick", "row_field")
@@ -64,7 +86,8 @@ def extract_from_step(spec: Dict[str, Any], step_result: Dict[str, Any]) -> Any:
         field = spec["field"]
         n = int(spec.get("n", 10))
         reverse = spec.get("order", "desc") == "desc"
-        unique = dedupe_rows_by_building(rows, rank_field=field)
+        building_field = spec.get("building_field") or _building_field_for_rows(rows)
+        unique = dedupe_rows_by_building(rows, rank_field=field, building_field=building_field)
         sorted_rows = sorted(
             unique,
             key=lambda r: float(r.get(field) or 0),
@@ -90,7 +113,7 @@ def run_transform_step(step_index: int, spec: Dict[str, Any], variables: Dict[st
 
     if transform == "top_n_by_field":
         source_var = spec["input_variable"]
-        rows = variables.get(source_var) or []
+        rows = _rows_from_variable(variables.get(source_var))
         n = int(resolve_value(spec.get("n", 10), variables))
         field = str(resolve_value(spec.get("field", "height"), variables))
         order = str(resolve_value(spec.get("order", "desc"), variables))
