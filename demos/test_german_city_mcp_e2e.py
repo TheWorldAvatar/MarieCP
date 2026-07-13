@@ -40,6 +40,27 @@ def _rows_ok(rows: List[Dict[str, Any]], *, min_rows: int = 1) -> tuple[bool, st
     return True, f"{n} row(s); sample={sample}", n
 
 
+def _rows_have_fields(
+    rows: List[Dict[str, Any]],
+    required: set[str],
+    *,
+    forbidden: set[str] | None = None,
+    min_rows: int = 1,
+) -> tuple[bool, str, int]:
+    n = len(rows or [])
+    if n < min_rows:
+        return False, f"expected >= {min_rows} rows, got {n}", n
+    sample = rows[0]
+    keys = set(sample.keys())
+    missing = required - keys
+    if missing:
+        return False, f"missing fields {sorted(missing)} in {json.dumps(sample, ensure_ascii=False)[:160]}", n
+    bad = (forbidden or set()) & keys
+    if bad:
+        return False, f"unexpected fields {sorted(bad)} in {json.dumps(sample, ensure_ascii=False)[:160]}", n
+    return True, f"{n} row(s); fields={sorted(keys)}", n
+
+
 def _wf_ok(result: Dict[str, Any], *, min_rows: int = 1) -> tuple[bool, str, int]:
     status = result.get("status")
     trace = result.get("call_trace") or []
@@ -53,6 +74,69 @@ def _wf_ok(result: Dict[str, Any], *, min_rows: int = 1) -> tuple[bool, str, int
     if rows >= min_rows:
         return True, f"trace rows={rows}", rows
     return False, f"no authoritative answer; trace rows={rows}", rows
+
+
+def _table_rows_from_variable(result: Dict[str, Any], var_name: str) -> List[Dict[str, Any]]:
+    variables = result.get("variables") or {}
+    value = variables.get(var_name)
+    if isinstance(value, list):
+        return [row for row in value if isinstance(row, dict)]
+    if isinstance(value, dict):
+        sample = value.get("sample")
+        if isinstance(sample, list):
+            return [row for row in sample if isinstance(row, dict)]
+    return []
+
+
+def _ubem_workflow_display_rows(
+    stem: str,
+    params: Dict[str, Any],
+    *,
+    required_field: str,
+) -> tuple[bool, str, int]:
+    """Run workflow + offline replay; assert adapter returns UBEM rows not height."""
+    from demos.twa_adapter import _answer_rows_from_offline_payload, load_offline_payload
+    from mini_marie.kgqa.offline_runner import replay_offline
+    from mini_marie.zaha.twa_city.workflow_mcp import run_workflow_online
+    from mini_marie.kgqa.recording_utils import extract_from_text
+
+    online = run_workflow_online(
+        stem,
+        online_limit=10,
+        question=f"e2e {stem}",
+        parameters_json=json.dumps(params),
+    )
+    rec = extract_from_text(online)
+    recording_path = rec.get("recording_path")
+    if not recording_path:
+        return False, "workflow online run did not return recording_path", 0
+
+    offline = replay_offline(recording_path, workflow_id=stem)
+    offline_path = offline.get("offline_path")
+    if offline.get("status") != "pass" or not offline_path:
+        wf = _run_wf(stem, params)
+        if wf.get("status") != "pass":
+            return False, f"offline replay failed: {offline.get('error') or offline.get('status')}", 0
+        for var in ("top_ubem_rows", "rank_pool", "probe_pool"):
+            rows = _table_rows_from_variable(wf, var)
+            if rows:
+                return _rows_have_fields(
+                    rows,
+                    {required_field},
+                    forbidden={"height"},
+                    min_rows=1,
+                )
+
+    payload = load_offline_payload(offline_path)
+    if not payload:
+        return False, f"offline payload missing: {offline_path}", 0
+    rows = _answer_rows_from_offline_payload(payload)
+    return _rows_have_fields(
+        rows,
+        {required_field},
+        forbidden={"height"},
+        min_rows=1,
+    )
 
 
 def _run_wf(stem: str, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
@@ -70,8 +154,6 @@ def _checks() -> Dict[str, Callable[[], tuple[bool, str, int]]]:
         get_co2_savings_stats,
         get_heat_supply_stats,
         get_pirmasens_schema_summary,
-        get_top_buildings_by_co2_savings,
-        get_top_buildings_by_heat_supply,
     )
     from mini_marie.zaha.twa_city.pirmasens_ontop_operations import (
         list_entities_by_type,
@@ -93,38 +175,100 @@ def _checks() -> Dict[str, Callable[[], tuple[bool, str, int]]]:
         "DE-BR-03": lambda: _rows_ok(get_top_buildings_by_height("bremen")[:10], min_rows=1),
         "DE-KL-01": lambda: _rows_ok(get_top_buildings_by_height("kaiserslautern"), min_rows=1),
         "DE-KL-02": lambda: _rows_ok(get_top_buildings_by_height("kaiserslautern")[:10], min_rows=1),
-        "DE-PS-01": lambda: _rows_ok(get_building_count("pirmasens")),
-        "DE-PS-02": lambda: _rows_ok(get_height_stats("pirmasens")),
-        "DE-PS-03": lambda: _rows_ok(get_top_buildings_by_height("pirmasens")[:7], min_rows=1),
+        "DE-PS-01": lambda: _rows_have_fields(
+            get_building_count("pirmasens"),
+            {"building_count"},
+            forbidden={"building", "height"},
+        ),
+        "DE-PS-02": lambda: _rows_have_fields(
+            get_height_stats("pirmasens"),
+            {"min_height", "max_height", "avg_height"},
+            forbidden={"building", "dab_building"},
+        ),
+        "DE-PS-03": lambda: _rows_have_fields(
+            get_top_buildings_by_height("pirmasens")[:7],
+            {"height"},
+            forbidden={"heat_kwh_per_m2", "co2_savings"},
+            min_rows=1,
+        ),
         "DE-PS-04": lambda: _rows_ok(get_top_buildings_by_height("pirmasens")[:8], min_rows=1),
         "DE-PS-05": lambda: _rows_ok(
             [r for r in get_top_buildings_by_height("pirmasens") if float(r.get("height", 0) or 0) >= 60],
             min_rows=0,
         ),
-        "DE-PS-06": lambda: _rows_ok(get_heat_supply_stats("pirmasens")),
-        "DE-PS-07": lambda: _rows_ok(get_top_buildings_by_heat_supply("pirmasens")[:5], min_rows=1),
-        "DE-PS-08": lambda: _rows_ok(get_top_buildings_by_co2_savings("pirmasens")[:6], min_rows=1),
+        "DE-PS-06": lambda: _rows_have_fields(
+            get_heat_supply_stats("pirmasens"),
+            {"min_kwh_per_m2", "max_kwh_per_m2", "avg_kwh_per_m2"},
+            forbidden={"building", "dab_building", "height"},
+        ),
+        "DE-PS-07": lambda: _ubem_workflow_display_rows(
+            "pirmasens_ubem_ranked",
+            {
+                "city": "pirmasens",
+                "top_n": 5,
+                "sort_field": "heat_kwh_per_m2",
+                "sort_order": "desc",
+            },
+            required_field="heat_kwh_per_m2",
+        ),
+        "DE-PS-08": lambda: _ubem_workflow_display_rows(
+            "pirmasens_ubem_co2_ranked",
+            {
+                "city": "pirmasens",
+                "top_n": 6,
+                "sort_field": "co2_savings",
+                "sort_order": "desc",
+            },
+            required_field="co2_savings",
+        ),
         "DE-PS-09": lambda: _rows_ok(get_building_count("pirmasens")),
         "DE-PS-10": lambda: (
             (True, summary[:160], 1)
             if (summary := get_pirmasens_schema_summary("pirmasens"))
             else (False, "empty schema summary", 0)
         ),
-        "DE-PS-11": lambda: _rows_ok(get_heat_supply_stats("pirmasens") + get_co2_savings_stats("pirmasens"), min_rows=2),
-        "DE-PS-12": lambda: _rows_ok(get_top_buildings_by_height("pirmasens")[:10], min_rows=1),
+        "DE-PS-11": lambda: (
+            lambda heat_rows, co2_rows: (
+                (True, f"heat+co2 stats ok; heat={json.dumps(heat_rows[0], ensure_ascii=False)[:80]}", 2)
+                if (
+                    _rows_have_fields(
+                        heat_rows,
+                        {"avg_kwh_per_m2"},
+                        forbidden={"building", "dab_building", "height"},
+                    )[0]
+                    and _rows_have_fields(
+                        co2_rows,
+                        {"avg_co2_savings"},
+                        forbidden={"building", "dab_building", "height"},
+                    )[0]
+                )
+                else (False, "expected separate heat and co2 aggregate rows", 0)
+            )
+        )(
+            get_heat_supply_stats("pirmasens"),
+            get_co2_savings_stats("pirmasens"),
+        ),
+        "DE-PS-12": lambda: _rows_have_fields(
+            get_top_buildings_by_height("pirmasens")[:10],
+            {"height"},
+            forbidden={"heat_kwh_per_m2", "co2_savings"},
+            min_rows=1,
+        ),
         "DE-PS-13": lambda: _rows_ok(get_top_buildings_by_height("pirmasens")[:12], min_rows=1),
         # Pirmasens public toilets (ontop-toilet)
         "DE-PT-01": lambda: _rows_ok(
             list_entities_by_type("toilet", "https://www.theworldavatar.com/kg/ontobuiltenv/Toilet", var_name="toilet"),
             min_rows=1,
         ),
-        "DE-PT-02": lambda: _rows_ok(
+        "DE-PT-02": lambda: _rows_have_fields(
             run_sparql_on_endpoint(
                 "toilet",
                 f"""PREFIX obe: {obe}
 PREFIX geo: <http://www.opengis.net/ont/geosparql#>
 SELECT ?toilet ?geometry WHERE {{ ?toilet a obe:Toilet ; geo:asWKT ?geometry . }}""",
             ),
+            {"geometry"},
+            forbidden={"height"},
             min_rows=1,
         ),
         "DE-PT-03": lambda: _rows_ok(
@@ -220,7 +364,7 @@ SELECT ?plot ?grz WHERE {
             ),
             min_rows=1,
         ),
-        "DE-PL-07": lambda: _rows_ok(
+        "DE-PL-07": lambda: _rows_have_fields(
             run_sparql_on_endpoint(
                 "plots",
                 """PREFIX geo: <http://www.opengis.net/ont/geosparql#>
@@ -229,6 +373,8 @@ SELECT ?plot ?wkt WHERE {
   ?geom geo:asWKT ?wkt .
 }""",
             ),
+            {"wkt"},
+            forbidden={"height"},
             min_rows=1,
         ),
         "DE-PL-08": lambda: _rows_ok(
@@ -297,7 +443,7 @@ SELECT ?building ?collector WHERE {
             ),
             min_rows=1,
         ),
-        "DE-ST-02": lambda: _rows_ok(
+        "DE-ST-02": lambda: _rows_have_fields(
             run_sparql_on_endpoint(
                 "solarthermie",
                 """PREFIX ub: <http://www.theworldavatar.com/kg/ontoubemmp/>
@@ -310,9 +456,11 @@ SELECT ?building ?heat WHERE {
   ?measure om:hasNumericalValue ?heat .
 }""",
             ),
+            {"heat"},
+            forbidden={"height", "co2_savings"},
             min_rows=1,
         ),
-        "DE-ST-03": lambda: _rows_ok(
+        "DE-ST-03": lambda: _rows_have_fields(
             run_sparql_on_endpoint(
                 "solarthermie",
                 """PREFIX ub: <http://www.theworldavatar.com/kg/ontoubemmp/>
@@ -325,9 +473,11 @@ SELECT ?building ?heat WHERE {
   ?measure om:hasNumericalValue ?heat .
 }""",
             ),
+            {"heat"},
+            forbidden={"height", "co2_savings"},
             min_rows=1,
         ),
-        "DE-ST-04": lambda: _rows_ok(
+        "DE-ST-04": lambda: _rows_have_fields(
             run_sparql_on_endpoint(
                 "solarthermie",
                 """PREFIX ub: <http://www.theworldavatar.com/kg/ontoubemmp/>
@@ -340,6 +490,8 @@ SELECT ?building ?co2 WHERE {
   FILTER(?co2 > 50)
 }""",
             ),
+            {"co2"},
+            forbidden={"height", "heat_kwh_per_m2"},
             min_rows=1,
         ),
     }

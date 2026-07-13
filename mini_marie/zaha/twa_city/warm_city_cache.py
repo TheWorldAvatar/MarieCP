@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from typing import Any, Dict, List
 
 from mini_marie.zaha.twa_city.atomic_warm_manifest import (
@@ -32,6 +33,7 @@ from mini_marie.zaha.twa_city.city_cache import (
     warm_locations_for_city,
     warm_locations_top_n,
 )
+from mini_marie.zaha.twa_city.limits import warm_delay_seconds
 from mini_marie.warm_manifest import is_resolved_warm_spec, specs_missing_full_tier
 
 UBEM_ATOMIC_TOOLS = frozenset({"list_dabgeo_heat_supply", "list_dabgeo_co2_savings"})
@@ -84,6 +86,10 @@ def warm_city(
                         **meta,
                     }
                 )
+                if i < len(city_specs):
+                    delay = warm_delay_seconds()
+                    if delay > 0 and not meta.get("from_cache"):
+                        time.sleep(delay)
         elif city_specs:
             print(f"  atomics skipped ({len(city_specs)} specs not run)", flush=True)
 

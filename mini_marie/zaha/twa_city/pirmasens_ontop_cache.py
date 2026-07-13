@@ -23,6 +23,7 @@ from mini_marie.cache_tiers import (
     row_limit_for_tier,
 )
 from mini_marie.sparql_utils import apply_sparql_limit, normalize_sparql
+from mini_marie.zaha.twa_city.limits import online_sparql_delay_seconds
 from mini_marie.zaha.twa_city.pirmasens_ontop_operations import resolve_pirmasens_endpoint
 from mini_marie.zaha.twa_city.sparql_plans import DEFAULT_ONLINE_LIMIT
 from mini_marie.zaha.twa_city.twa_city_operations import execute_sparql
@@ -233,6 +234,7 @@ def invoke_run_sparql(
         "endpoint_id": endpoint_id,
     }
 
+    cache_miss = False
     if use_cache:
         cached = ck.get(RUN_SPARQL_TOOL, args, tier)
         if cached is not None:
@@ -250,6 +252,7 @@ def invoke_run_sparql(
                 if own:
                     ck.close()
                 return full_rows[: int(limit)], meta
+        cache_miss = True
 
     if not allow_remote:
         if own:
@@ -258,6 +261,11 @@ def invoke_run_sparql(
             f"Missing full cache for run_sparql endpoint={endpoint_id!r}. "
             "Warm with: python -m mini_marie.zaha.twa_city.warm_pirmasens_ontop_cache --page-questions"
         )
+
+    if cache_miss and tier == TIER_PROBE:
+        delay = online_sparql_delay_seconds()
+        if delay > 0:
+            time.sleep(delay)
 
     started = time.perf_counter()
     rows = execute_sparql(exec_query, endpoint_url, timeout=timeout)

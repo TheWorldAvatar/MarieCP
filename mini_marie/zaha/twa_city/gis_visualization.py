@@ -55,6 +55,73 @@ def parse_geosparql_wkt(raw: str):
     return force_2d(shapely_wkt.loads(text))
 
 
+def _city_expected_lon_lat(city: str) -> Optional[Tuple[float, float]]:
+    key = (city or "").strip().lower().replace(" ", "_")
+    if key == "kl":
+        key = "kaiserslautern"
+    view = CITY_VIEW.get(key)
+    if not view:
+        return None
+    # CITY_VIEW centers are stored as [lat, lon]
+    lat, lon = view["center"]
+    return float(lon), float(lat)
+
+
+def recenter_wkts_to_city(
+    wkts: List[str],
+    city: str,
+    *,
+    max_offset_deg: float = 0.35,
+) -> List[str]:
+    """
+    Translate WKT footprints when the cluster is far from the known city centre.
+
+    Pirmasens CityGML Ontop currently publishes CRS84 building geometries ~6° too
+    far east (western Czech Republic), while the plots Ontop layer is correct.
+    Translating the whole cluster to CITY_VIEW keeps relative footprints and puts
+    markers on Pirmasens for the Zaha demo map.
+    """
+    if not wkts:
+        return wkts
+    expected = _city_expected_lon_lat(city)
+    if expected is None:
+        return wkts
+    exp_lon, exp_lat = expected
+
+    geoms = []
+    for text in wkts:
+        try:
+            geoms.append(parse_geosparql_wkt(text) if text.lstrip().startswith("<") else force_2d(shapely_wkt.loads(text)))
+        except Exception:
+            try:
+                geoms.append(force_2d(shapely_wkt.loads(text)))
+            except Exception:
+                continue
+    if not geoms:
+        return wkts
+
+    from shapely.ops import unary_union
+    from shapely.affinity import translate
+
+    cluster = unary_union(geoms)
+    clon, clat = cluster.centroid.x, cluster.centroid.y
+    # Already near the city — leave alone (Bremen/KL and corrected Pirmasens).
+    if abs(clon - exp_lon) <= max_offset_deg and abs(clat - exp_lat) <= max_offset_deg:
+        return wkts
+
+    dlon = exp_lon - clon
+    dlat = exp_lat - clat
+    # Only auto-correct large, city-scale blunders (not tiny GPS noise).
+    if abs(dlon) < 1.0 and abs(dlat) < 1.0:
+        return wkts
+
+    out: List[str] = []
+    for geom in geoms:
+        shifted = translate(geom, xoff=dlon, yoff=dlat)
+        out.append(shapely_wkt.dumps(force_2d(shifted)))
+    return out or wkts
+
+
 def _usage_short(usage_iri: Optional[str]) -> str:
     if not usage_iri:
         return "unknown"
@@ -215,6 +282,13 @@ def generate_building_map(
             mode = "top_height_fallback"
     else:
         rows = fetch_buildings_with_wkt_top_height(city_key, limit=limit)
+
+    # Upstream Pirmasens CityGML Ontop WKT is currently ~6° too far east.
+    corrected = recenter_wkts_to_city([str(r.get("wkt") or "") for r in rows], city_key)
+    if len(corrected) == len(rows):
+        for row, wkt in zip(rows, corrected):
+            if wkt:
+                row["wkt"] = wkt
 
     geojson = rows_to_geojson(rows)
     if not geojson["features"]:

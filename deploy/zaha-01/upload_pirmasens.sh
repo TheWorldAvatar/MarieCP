@@ -15,13 +15,18 @@ fi
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 ONTOP_DB="${LOCAL_DATA}/mini_marie_cache/twa_city/pirmasens_ontop_cache.sqlite"
 
-if [[ ! -f "${ONTOP_DB}" ]]; then
+WARM_MODE="${PIRMASENS_WARM_MODE:-page-questions}"
+SKIP_BUILD="${PIRMASENS_SKIP_BUILD:-0}"
+
+if [[ "${WARM_MODE}" != "remote-warm" && "${WARM_MODE}" != "full-fast" && ! -f "${ONTOP_DB}" ]]; then
   echo "ERROR: missing ${ONTOP_DB} — run warm_pirmasens_ontop_cache --page-questions first" >&2
   exit 1
 fi
 
-echo "==> Upload pirmasens_ontop_cache.sqlite"
-rsync -avP "${ONTOP_DB}" "${REMOTE}:${REMOTE_DATA}/mini_marie_cache/twa_city/"
+if [[ "${WARM_MODE}" != "remote-warm" && "${WARM_MODE}" != "full-fast" ]]; then
+  echo "==> Upload pirmasens_ontop_cache.sqlite"
+  rsync -avP "${ONTOP_DB}" "${REMOTE}:${REMOTE_DATA}/mini_marie_cache/twa_city/"
+fi
 
 echo "==> Sync Pirmasens code paths"
 rsync -avP \
@@ -39,10 +44,32 @@ rsync -avP \
   "${REMOTE}:${REMOTE_REPO}/mini_marie/kg_catalog/"
 
 rsync -avP \
+  "${ROOT}/mini_marie/kgqa/agent.py" \
+  "${REMOTE}:${REMOTE_REPO}/mini_marie/kgqa/"
+
+rsync -avP \
+  "${ROOT}/mini_marie/zaha/twa_city/workflows/pirmasens_ubem_ranked.json" \
+  "${ROOT}/mini_marie/zaha/twa_city/workflows/pirmasens_ubem_co2_ranked.json" \
+  "${ROOT}/mini_marie/zaha/twa_city/workflows/pirmasens_ubem_heat_filter.json" \
+  "${ROOT}/mini_marie/zaha/twa_city/sparql_plans.py" \
+  "${ROOT}/mini_marie/zaha/twa_city/workflow_engine.py" \
+  "${ROOT}/mini_marie/zaha/twa_city/workflow_mcp.py" \
+  "${REMOTE}:${REMOTE_REPO}/mini_marie/zaha/twa_city/"
+
+rsync -avP \
+  "${ROOT}/mini_marie/zaha/twa_city/workflows/pirmasens_ubem_ranked.json" \
+  "${ROOT}/mini_marie/zaha/twa_city/workflows/pirmasens_ubem_co2_ranked.json" \
+  "${ROOT}/mini_marie/zaha/twa_city/workflows/pirmasens_ubem_heat_filter.json" \
+  "${REMOTE}:${REMOTE_REPO}/mini_marie/zaha/twa_city/workflows/"
+
+rsync -avP \
   "${ROOT}/demos/german_city_competency_questions.json" \
+  "${ROOT}/demos/german_city_specs.py" \
+  "${ROOT}/demos/twa_adapter.py" \
   "${ROOT}/demos/warm_german_city_caches.py" \
   "${ROOT}/demos/test_german_city_mcp_e2e.py" \
   "${ROOT}/demos/test_german_city_cache_alignment.py" \
+  "${ROOT}/demos/test_german_city_specs.py" \
   "${ROOT}/demos/test_pirmasens_md_cqs.py" \
   "${REMOTE}:${REMOTE_REPO}/demos/"
 
@@ -54,20 +81,41 @@ rsync -avP \
   "${ROOT}/demos/marie-classic/static/js/german_city_questions.js" \
   "${REMOTE}:${REMOTE_REPO}/demos/marie-classic/static/js/" 2>/dev/null || true
 
-echo "==> Rebuild + restart mariecp-demo"
+if [[ "${WARM_MODE}" == "full-fast" ]]; then
+  ONTOP_WARM_FLAGS="--full-fast --missing-only"
+elif [[ "${WARM_MODE}" == "remote-warm" ]]; then
+  ONTOP_WARM_FLAGS="--full-fast --missing-only"
+else
+  ONTOP_WARM_FLAGS="--page-questions --missing-only"
+fi
+
+BUILD_FLAG="--build"
+if [[ "${SKIP_BUILD}" == "1" ]]; then
+  BUILD_FLAG=""
+fi
+
+echo "==> Restart mariecp-demo (warm_mode=${WARM_MODE}, skip_build=${SKIP_BUILD})"
 ssh "${REMOTE}" bash -lc "'
   set -e
   cd \"${REMOTE_REPO}\"
-  docker compose --env-file .env -f docker/compose.demo.yml -p mariecp-demo up -d --build
-  echo Waiting for health...
-  for i in 1 2 3 4 5 6 7 8 9 10; do
-    if curl -sf http://127.0.0.1:3001/health >/dev/null; then break; fi
-    sleep 3
-  done
+  if [[ -n \"${BUILD_FLAG}\" ]]; then
+    docker compose --env-file .env -f docker/compose.demo.yml -p mariecp-demo up -d ${BUILD_FLAG}
+    echo Waiting for health...
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+      if curl -sf http://127.0.0.1:3001/health >/dev/null; then break; fi
+      sleep 3
+    done
+  else
+    docker compose --env-file .env -f docker/compose.demo.yml -p mariecp-demo up -d
+  fi
   docker compose --env-file .env -f docker/compose.demo.yml -p mariecp-demo exec -T mariecp-demo \
-    python -m mini_marie.zaha.twa_city.warm_pirmasens_ontop_cache --status
+    python -m mini_marie.zaha.twa_city.warm_pirmasens_ontop_cache ${ONTOP_WARM_FLAGS}
+  docker compose --env-file .env -f docker/compose.demo.yml -p mariecp-demo exec -T mariecp-demo \
+    python -m mini_marie.zaha.twa_city.warm_city_cache --city pirmasens --atomics-only --missing-only
   docker compose --env-file .env -f docker/compose.demo.yml -p mariecp-demo exec -T mariecp-demo \
     python -m mini_marie.zaha.twa_city.warm_city_cache --city pirmasens --locations-only --locations-top-n 12 --missing-only
+  docker compose --env-file .env -f docker/compose.demo.yml -p mariecp-demo exec -T mariecp-demo \
+    python -m mini_marie.zaha.twa_city.warm_pirmasens_ontop_cache --status
   docker compose --env-file .env -f docker/compose.demo.yml -p mariecp-demo exec -T mariecp-demo \
     python -c \"from mini_marie.zaha.twa_city.pirmasens_ontop_operations import run_sparql_on_endpoint; rows=run_sparql_on_endpoint('"'"'toilet'"'"', '"'"'PREFIX obe: <https://www.theworldavatar.com/kg/ontobuiltenv/> SELECT ?toilet WHERE { ?toilet a obe:Toilet . }'"'"', limit=5); print('"'"'cache_toilets'"'"', len(rows), rows[0] if rows else None)\"
   docker compose --env-file .env -f docker/compose.demo.yml -p mariecp-demo exec -T mariecp-demo \

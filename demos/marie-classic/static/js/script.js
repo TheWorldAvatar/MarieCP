@@ -30,9 +30,20 @@ Global states
 ------------------------------
 */
 
+function defaultQaDomain() {
+    const path = (window.location && window.location.pathname) || ""
+    if (path.includes("/demos/zaha")) {
+        return "singapore"
+    }
+    if (path.includes("/demos/marie")) {
+        return "marie"
+    }
+    return "marie"
+}
+
 const globalState = (function () {
     const states = {
-        qa_domain: "marie",
+        qa_domain: defaultQaDomain(),
         isProcessing: false,
         chatbotLatency: null,
         err: null

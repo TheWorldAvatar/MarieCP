@@ -47,6 +47,50 @@ def lookup_german_city_question(question: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def is_workflow_spec(spec: Dict[str, Any]) -> bool:
+    return bool(spec.get("workflow"))
+
+
 def is_location_workflow_spec(spec: Dict[str, Any]) -> bool:
     params = spec.get("parameters") or {}
-    return bool(spec.get("workflow")) and bool(params.get("include_locations"))
+    return is_workflow_spec(spec) and bool(params.get("include_locations"))
+
+
+@lru_cache(maxsize=1)
+def _load_pirmasens_cq_parameters() -> Dict[str, Dict[str, Any]]:
+    path = _REPO / "mini_marie" / "zaha" / "twa_city" / "competency_questions_pirmasens.json"
+    if not path.is_file():
+        return {}
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    items = raw.get("questions", raw) if isinstance(raw, dict) else raw
+    out: Dict[str, Dict[str, Any]] = {}
+    if not isinstance(items, list):
+        return out
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        question = (item.get("question") or "").strip()
+        params = item.get("parameters")
+        if question and isinstance(params, dict):
+            out[question] = dict(params)
+    return out
+
+
+def resolve_city_workflow_parameters(
+    question: str,
+    workflow_name: str,
+    *,
+    spec: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Merge catalog parameters with workflow schema defaults."""
+    from mini_marie.workflow_parameters import resolve_workflow_parameters
+    from mini_marie.zaha.twa_city.workflow_engine import load_workflow
+
+    overrides: Dict[str, Any] = {}
+    if spec and spec.get("parameters"):
+        overrides.update(dict(spec["parameters"]))
+    else:
+        overrides.update(_load_pirmasens_cq_parameters().get((question or "").strip(), {}))
+
+    wf = load_workflow(workflow_name)
+    return resolve_workflow_parameters(wf, question, overrides or None)

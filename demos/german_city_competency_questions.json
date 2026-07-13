@@ -87,7 +87,14 @@
       },
       {
         "id": "DE-PS-03",
-        "question": "What are the seven tallest buildings in Pirmasens?"
+        "question": "What are the seven tallest buildings in Pirmasens?",
+        "workflow": "city_ranked_buildings",
+        "parameters": {
+          "city": "pirmasens",
+          "top_n": 7,
+          "sort_field": "height",
+          "sort_order": "desc"
+        }
       },
       {
         "id": "DE-PS-04",
@@ -104,7 +111,14 @@
       },
       {
         "id": "DE-PS-05",
-        "question": "Which Pirmasens buildings are taller than 60 metres?"
+        "question": "Which Pirmasens buildings are taller than 60 metres?",
+        "workflow": "city_ranked_buildings",
+        "parameters": {
+          "city": "pirmasens",
+          "sort_field": "height",
+          "sort_order": "desc",
+          "min_height_m": 60
+        }
       },
       {
         "id": "DE-PS-06",
@@ -112,11 +126,25 @@
       },
       {
         "id": "DE-PS-07",
-        "question": "Which five Pirmasens DABGEO buildings have the highest annual heat supply from thermal collectors?"
+        "question": "Which five Pirmasens DABGEO buildings have the highest annual heat supply from thermal collectors?",
+        "workflow": "pirmasens_ubem_ranked",
+        "parameters": {
+          "city": "pirmasens",
+          "top_n": 5,
+          "sort_field": "heat_kwh_per_m2",
+          "sort_order": "desc"
+        }
       },
       {
         "id": "DE-PS-08",
-        "question": "Which six Pirmasens buildings have the highest modelled CO2 savings from solar collectors?"
+        "question": "Which six Pirmasens buildings have the highest modelled CO2 savings from solar collectors?",
+        "workflow": "pirmasens_ubem_co2_ranked",
+        "parameters": {
+          "city": "pirmasens",
+          "top_n": 6,
+          "sort_field": "co2_savings",
+          "sort_order": "desc"
+        }
       },
       {
         "id": "DE-PS-09",
@@ -132,7 +160,14 @@
       },
       {
         "id": "DE-PS-12",
-        "question": "What are the 10 tallest buildings in Pirmasens?"
+        "question": "What are the 10 tallest buildings in Pirmasens?",
+        "workflow": "city_ranked_buildings",
+        "parameters": {
+          "city": "pirmasens",
+          "top_n": 10,
+          "sort_field": "height",
+          "sort_order": "desc"
+        }
       },
       {
         "id": "DE-PS-13",

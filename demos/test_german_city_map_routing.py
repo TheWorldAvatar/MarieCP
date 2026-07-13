@@ -5,6 +5,26 @@ from __future__ import annotations
 from demos.twa_adapter import _data_from_offline, _map_items_from_rows, _rows_to_table
 
 
+def test_recenter_pirmasens_wkt_from_czech_blunder():
+    from mini_marie.zaha.twa_city.gis_visualization import recenter_wkts_to_city
+    from shapely import wkt as sw
+
+    bad = "POLYGON ((13.587 49.242, 13.588 49.242, 13.588 49.243, 13.587 49.243, 13.587 49.242))"
+    fixed = recenter_wkts_to_city([bad], "pirmasens")
+    assert len(fixed) == 1
+    g = sw.loads(fixed[0])
+    assert abs(g.centroid.x - 7.605) < 0.05
+    assert abs(g.centroid.y - 49.203) < 0.05
+
+
+def test_recenter_leaves_bremen_untouched():
+    from mini_marie.zaha.twa_city.gis_visualization import recenter_wkts_to_city
+
+    good = "POLYGON ((8.80 53.08, 8.81 53.08, 8.81 53.09, 8.80 53.09, 8.80 53.08))"
+    fixed = recenter_wkts_to_city([good], "bremen")
+    assert fixed == [good]
+
+
 def test_map_items_from_rows_supports_multiple_footprints():
     rows = [
         {"building": "http://ex/1", "height": "70", "wkt": "POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))"},

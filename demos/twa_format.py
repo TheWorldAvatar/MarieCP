@@ -285,7 +285,23 @@ def _attach_viz_items(
     wkts = _collect_wkts(raw_rows)
     normalized = [_normalize_wkt(w) for w in wkts]
     normalized = [w for w in normalized if w]
-    merged = _merge_wkts(wkts)
+    city = ""
+    for row in raw_rows[:20]:
+        c = row.get("city")
+        if isinstance(c, str) and c.strip():
+            city = c.strip().lower()
+            break
+    if not city:
+        blob = f"{name} {question}".lower()
+        for key in ("pirmasens", "bremen", "kaiserslautern"):
+            if key in blob:
+                city = key
+                break
+    if city and normalized:
+        from mini_marie.zaha.twa_city.gis_visualization import recenter_wkts_to_city
+
+        normalized = recenter_wkts_to_city(normalized, city)
+    merged = _merge_wkts(normalized)
     if merged:
         map_item: Dict[str, Any] = {"type": "map", "title": name, "wkt_crs84": merged}
         if len(normalized) > 1:
@@ -477,36 +493,167 @@ def _marie_data_from_twa(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return out
 
 
+def _looks_like_raw_json(text: Any) -> bool:
+    if not isinstance(text, str):
+        return isinstance(text, (dict, list))
+    s = text.strip()
+    if not s:
+        return False
+    if (s.startswith("{") and s.endswith("}")) or (s.startswith("[") and s.endswith("]")):
+        try:
+            json.loads(s)
+            return True
+        except json.JSONDecodeError:
+            return False
+    return False
+
+
+def _human_number(value: Any) -> str:
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    if num.is_integer():
+        return f"{int(num):,}"
+    return f"{num:,.2f}".rstrip("0").rstrip(".")
+
+
+def _summarize_metric_row(row: Dict[str, Any], question: str = "") -> Optional[str]:
+    """Turn a single stats/count row into a short Markdown sentence."""
+    if not row:
+        return None
+    q = (question or "").lower()
+
+    if {"min_kwh_per_m2", "max_kwh_per_m2", "avg_kwh_per_m2"} <= set(row):
+        where = "Pirmasens" if "pirmasens" in q else "the city"
+        count = row.get("measure_count")
+        count_bit = f" across **{_human_number(count)}** measurements" if count not in (None, "") else ""
+        return (
+            f"For {where} thermal collectors, annual heat supply ranges from "
+            f"**{_human_number(row['min_kwh_per_m2'])}** to **{_human_number(row['max_kwh_per_m2'])}** "
+            f"kWh/m² (average **{_human_number(row['avg_kwh_per_m2'])}** kWh/m²{count_bit})."
+        )
+
+    if {"min_co2", "max_co2", "avg_co2"} <= set(row) or {
+        "min_co2_savings",
+        "max_co2_savings",
+        "avg_co2_savings",
+    } <= set(row):
+        mn = row.get("min_co2_savings", row.get("min_co2"))
+        mx = row.get("max_co2_savings", row.get("max_co2"))
+        avg = row.get("avg_co2_savings", row.get("avg_co2"))
+        where = "Pirmasens" if "pirmasens" in q else "the city"
+        return (
+            f"For {where} solar collectors, modelled annual CO₂ savings range from "
+            f"**{_human_number(mn)}** to **{_human_number(mx)}** "
+            f"(average **{_human_number(avg)}**)."
+        )
+
+    if "office_building_count" in row:
+        return f"There are **{_human_number(row['office_building_count'])}** office buildings."
+
+    if "commercial_plot_count" in row:
+        return f"There are **{_human_number(row['commercial_plot_count'])}** plots zoned commercial."
+
+    if "building_count" in row and len(row) <= 3:
+        where = (
+            "Pirmasens"
+            if "pirmasens" in q
+            else ("Bremen" if "bremen" in q else ("Singapore" if "singapore" in q else "the graph"))
+        )
+        return f"There are **{_human_number(row['building_count'])}** buildings in {where}."
+
+    if "min_height" in row and "max_height" in row and "avg_height" in row:
+        where = "Pirmasens" if "pirmasens" in q else ("Bremen" if "bremen" in q else "the city")
+        return (
+            f"Building measuredHeight in {where} ranges from "
+            f"**{_human_number(row['min_height'])}** m to **{_human_number(row['max_height'])}** m "
+            f"(average **{_human_number(row['avg_height'])}** m)."
+        )
+
+    # Generic compact scalar row (avoid dumping JSON braces).
+    if len(row) <= 6 and all(not isinstance(v, (dict, list)) for v in row.values()):
+        parts = [f"**{_human_number(v)}** {k.replace('_', ' ')}" for k, v in row.items() if v not in (None, "")]
+        if parts:
+            return "Summary: " + "; ".join(parts) + "."
+    return None
+
+
+def _first_table_rows(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    for item in data:
+        if item.get("type") != "table":
+            continue
+        rows = item.get("bindings") or item.get("data") or []
+        if rows:
+            return [r for r in rows if isinstance(r, dict)]
+    return []
+
+
+def _narrative_from_data(question: str, data: List[Dict[str, Any]]) -> Optional[str]:
+    rows = _first_table_rows(data)
+    if not rows:
+        return None
+    summary = _summarize_metric_row(rows[0], question)
+    if summary:
+        return summary
+    if len(rows) == 1:
+        preview = ", ".join(
+            f"{k.replace('_', ' ')} {_human_number(v)}"
+            for k, v in rows[0].items()
+            if v not in (None, "") and "wkt" not in k.lower()
+        )
+        return f"Result: {preview}." if preview else None
+    return f"Found **{len(rows)}** matching rows for your question."
+
+
 def build_twa_narrative_rule(
     question: str,
     kgqa: Dict[str, Any],
     data: List[Dict[str, Any]],
 ) -> str:
-    """Rule-based narrative fallback (no LLM)."""
+    """Rule-based narrative fallback (no LLM). Always prefer natural language over raw JSON."""
     from demos.twa_adapter import _display_answer, _summarize_sg_tool_rows
 
     metadata = kgqa.get("metadata") or {}
     tool_outputs = (metadata.get("tool_activity") or {}).get("tool_outputs") or []
     online_answer = _display_answer(kgqa) or kgqa.get("online_answer")
 
+    from_data = _narrative_from_data(question, data)
+    if from_data:
+        # Prefer structured NL when the agent answer is raw JSON / a dict dump.
+        if _looks_like_raw_json(online_answer) or not (
+            isinstance(online_answer, str) and not _is_weak_answer(online_answer)
+        ):
+            return from_data
+
     for item in tool_outputs:
         parsed = parse_tabular_content(item.get("content") or "")
         if parsed:
             _cols, rows = parsed
+            if rows:
+                metric = _summarize_metric_row(rows[0], question)
+                if metric:
+                    return metric
             summary = _summarize_sg_tool_rows(rows, question)
-            if summary and not _is_weak_answer(summary):
+            if summary and not _is_weak_answer(summary) and not _looks_like_raw_json(summary):
                 return summary
 
-    if isinstance(online_answer, str) and not _is_weak_answer(online_answer):
+    if isinstance(online_answer, str) and not _is_weak_answer(online_answer) and not _looks_like_raw_json(online_answer):
         return online_answer.strip()
 
+    if from_data:
+        return from_data
+
     marie_data = _marie_data_from_twa(data)
-    return build_marie_narrative(
+    text = build_marie_narrative(
         question,
-        online_answer=online_answer,
+        online_answer=online_answer if not _looks_like_raw_json(online_answer) else "",
         tool_outputs=tool_outputs,
         data=marie_data,
     )
+    if text and not _looks_like_raw_json(text):
+        return text
+    return from_data or "I found structured results in the table, but could not phrase a summary."
 
 
 def _llm_narrative_enabled() -> bool:
@@ -552,22 +699,24 @@ async def build_twa_narrative_llm(
     from demos.twa_adapter import _display_answer
 
     online_answer = _display_answer(kgqa) or kgqa.get("online_answer") or ""
+    if _looks_like_raw_json(online_answer):
+        online_answer = ""
     preview = _data_preview_for_llm(data)
     has_map = any(item.get("type") in {"map", "embed"} for item in data)
 
     system = (
-        "You write concise Markdown answers for a Singapore / urban knowledge-graph demo. "
+        "You write concise natural-language Markdown answers for an urban knowledge-graph demo (Zaha). "
         "Use the user's question and structured data preview only. "
-        "Never paste full HTTP IRIs — use short labels. "
+        "Never paste raw JSON, Python dicts, full HTTP IRIs, or key:value dumps — always write prose. "
         "All numbers must come from the data preview or agent answer. "
-        "If data is missing (e.g. Jurong pollutant timeseries, ship speed), state the limitation clearly "
+        "If data is missing, state the limitation clearly "
         "and mention that an interactive map may appear below when available. "
         "Use **bold** for key figures and short bullet lists when helpful."
     )
     user = f"""Question:
 {question.strip()}
 
-Agent answer (may be partial):
+Agent answer (may be partial; ignore if empty):
 {str(online_answer).strip()[:2000]}
 
 Structured data preview:
@@ -575,7 +724,7 @@ Structured data preview:
 
 Includes map or embed: {has_map}
 
-Write a clear natural-language Markdown response (2–6 sentences or short bullets)."""
+Write a clear natural-language Markdown response (2–6 sentences or short bullets). Do not output JSON."""
 
     try:
         llm = LLMCreator(
@@ -587,7 +736,7 @@ Write a clear natural-language Markdown response (2–6 sentences or short bulle
             [SystemMessage(content=system), HumanMessage(content=user)]
         )
         text = (result.content if hasattr(result, "content") else str(result)).strip()
-        if text and len(text) >= 20:
+        if text and len(text) >= 20 and not _looks_like_raw_json(text):
             return text
     except Exception:
         pass

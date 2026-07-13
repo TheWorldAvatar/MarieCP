@@ -44,11 +44,61 @@ def _table_rows(value: Any) -> List[Dict[str, Any]]:
     return []
 
 
-_PREFERRED_OFFLINE_VARS = (
+_EXTENDED_PREFERRED_OFFLINE_VARS = (
+    "top_ubem_rows",
     "top_building_rows",
     "buildings_with_wkt",
     "location_join_rows",
 )
+
+
+def _offline_answer_variable(payload: Dict[str, Any]) -> Optional[str]:
+    var = payload.get("answer_variable")
+    if var:
+        return str(var)
+    wf_def = payload.get("workflow_definition") or {}
+    var = wf_def.get("answer_variable")
+    if var:
+        return str(var)
+    return None
+
+
+def _rows_for_offline_variable(payload: Dict[str, Any], var_name: str) -> List[Dict[str, Any]]:
+    sidecar_vars = _sidecar_variable_paths(payload)
+    path = sidecar_vars.get(var_name)
+    if path:
+        rows = _rows_from_sidecar(path)
+        if rows:
+            return rows
+    variables = payload.get("variables") or {}
+    return _table_rows(variables.get(var_name))
+
+
+def _answer_rows_from_offline_payload(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Resolve authoritative table rows from offline replay metadata."""
+    answer_var = _offline_answer_variable(payload)
+    if answer_var:
+        rows = _rows_for_offline_variable(payload, answer_var)
+        if rows:
+            return rows
+
+    answer_rows = _table_rows(payload.get("answer"))
+    if answer_rows:
+        return answer_rows
+
+    sidecar_vars = _sidecar_variable_paths(payload)
+    for var in _EXTENDED_PREFERRED_OFFLINE_VARS:
+        path = sidecar_vars.get(var)
+        if path:
+            rows = _rows_from_sidecar(path)
+            if rows:
+                return rows
+    variables = payload.get("variables") or {}
+    for var in _EXTENDED_PREFERRED_OFFLINE_VARS:
+        rows = _table_rows(variables.get(var))
+        if rows:
+            return rows
+    return []
 
 
 def _sidecar_variable_paths(payload: Dict[str, Any]) -> Dict[str, str]:
@@ -78,15 +128,25 @@ def _rows_from_sidecar(path: str, *, limit: int = 500) -> List[Dict[str, Any]]:
 def _preferred_offline_table(payload: Dict[str, Any]) -> Optional[Tuple[str, List[Dict[str, Any]]]]:
     from mini_marie.row_annotations import stamp_offline_table_rows
 
+    answer_var = _offline_answer_variable(payload)
+    if answer_var:
+        rows = _rows_for_offline_variable(payload, answer_var)
+        if rows:
+            return answer_var, stamp_offline_table_rows(rows, payload)
+
+    answer_rows = _table_rows(payload.get("answer"))
+    if answer_rows:
+        return "answer", stamp_offline_table_rows(answer_rows, payload)
+
     sidecar_vars = _sidecar_variable_paths(payload)
-    for var in _PREFERRED_OFFLINE_VARS:
+    for var in _EXTENDED_PREFERRED_OFFLINE_VARS:
         path = sidecar_vars.get(var)
         if path:
             rows = _rows_from_sidecar(path)
             if rows:
                 return var, stamp_offline_table_rows(rows, payload)
     variables = payload.get("variables") or {}
-    for var in _PREFERRED_OFFLINE_VARS:
+    for var in _EXTENDED_PREFERRED_OFFLINE_VARS:
         var_rows = _table_rows(variables.get(var))
         if var_rows:
             return var, stamp_offline_table_rows(var_rows, payload)
@@ -334,10 +394,27 @@ def _collect_row_wkts(rows: List[Dict[str, Any]], *, limit: int = 50) -> List[st
     return wkts
 
 
+def _infer_city_for_map(name: str, rows: List[Dict[str, Any]]) -> str:
+    for row in rows[:20]:
+        city = row.get("city")
+        if isinstance(city, str) and city.strip():
+            return city.strip().lower()
+    text = (name or "").lower()
+    for city in ("pirmasens", "bremen", "kaiserslautern"):
+        if city in text:
+            return city
+    return ""
+
+
 def _map_items_from_rows(name: str, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    from mini_marie.zaha.twa_city.gis_visualization import recenter_wkts_to_city
+
     wkts = _collect_row_wkts(rows)
     if not wkts:
         return []
+    city = _infer_city_for_map(name, rows)
+    if city:
+        wkts = recenter_wkts_to_city(wkts, city)
     item: Dict[str, Any] = {"type": "map", "title": name, "wkt_crs84": wkts[0]}
     if len(wkts) > 1:
         item["wkt_list"] = wkts
@@ -380,19 +457,7 @@ def _wkt_rows_from_offline_payload(payload: Dict[str, Any]) -> List[Dict[str, An
 
 
 def _table_rows_from_offline_payload(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
-    sidecar_vars = _sidecar_variable_paths(payload)
-    for var in _PREFERRED_OFFLINE_VARS:
-        path = sidecar_vars.get(var)
-        if path:
-            rows = _rows_from_sidecar(path)
-            if rows:
-                return rows
-    variables = payload.get("variables") or {}
-    for var in _PREFERRED_OFFLINE_VARS:
-        rows = _table_rows(variables.get(var))
-        if rows:
-            return rows
-    return []
+    return _answer_rows_from_offline_payload(payload)
 
 
 def _offline_payload_label(payload: Dict[str, Any]) -> str:
@@ -617,8 +682,13 @@ def _summarize_sg_tool_rows(rows: List[Dict[str, Any]], question: str) -> str:
             f"**{row.get('area_sqm')}** sqm plot area"
             + (f" (max GFA **{row['max_gfa']}** sqm)." if row.get("max_gfa") else ".")
         )
-    preview = ", ".join(f"{k}: {v}" for k, v in row.items() if v)[:400]
-    return preview or f"Tool returned: {row}"
+    from demos.twa_format import _summarize_metric_row
+
+    metric = _summarize_metric_row(row, question)
+    if metric:
+        return metric
+    preview = "; ".join(f"{k.replace('_', ' ')} {v}" for k, v in row.items() if v)[:400]
+    return preview or "Tool returned a result row."
 
 
 def _sg_tool_for_entry(entry: Any) -> Tuple[Optional[str], Optional[Any]]:
@@ -842,16 +912,27 @@ def _try_direct_mof_competency_workflow(
 def _summarize_city_workflow_rows(rows: List[Dict[str, Any]], *, city: str) -> str:
     if not rows:
         return f"No building results returned for {city}."
-    lines = [f"Found **{len(rows)}** buildings in **{city}**."]
+    lines = [f"Found **{len(rows)}** result rows for **{city}**."]
     for row in rows[:8]:
-        height = row.get("height") or row.get("height_m") or "?"
-        usage = row.get("usage_type") or row.get("usage") or ""
-        label = row.get("label") or row.get("uuid") or row.get("building") or ""
+        label = (
+            row.get("dab_building")
+            or row.get("building")
+            or row.get("label")
+            or row.get("uuid")
+            or ""
+        )
         if isinstance(label, str) and label.startswith("http"):
             label = label.rsplit("/", 1)[-1]
-        usage_short = usage.rsplit("/", 1)[-1] if isinstance(usage, str) and "/" in usage else usage
-        extra = f", usage {usage_short}" if usage_short else ""
-        lines.append(f"- {label}: {height} m{extra}")
+        if row.get("heat_kwh_per_m2") is not None:
+            lines.append(f"- {label}: {row.get('heat_kwh_per_m2')} kWh/m² heat supply")
+        elif row.get("co2_savings") is not None:
+            lines.append(f"- {label}: {row.get('co2_savings')} CO2 savings")
+        else:
+            height = row.get("height") or row.get("height_m") or "?"
+            usage = row.get("usage_type") or row.get("usage") or ""
+            usage_short = usage.rsplit("/", 1)[-1] if isinstance(usage, str) and "/" in usage else usage
+            extra = f", usage {usage_short}" if usage_short else ""
+            lines.append(f"- {label}: {height} m{extra}")
     if len(rows) > 8:
         lines.append(f"- … and {len(rows) - 8} more")
     if any(_wkt_from_row(row) for row in rows):
@@ -859,26 +940,19 @@ def _summarize_city_workflow_rows(rows: List[Dict[str, Any]], *, city: str) -> s
     return "\n".join(lines)
 
 
-def _try_direct_city_workflow(
+def _run_direct_city_workflow(
     question: str,
     route: RouteResult,
-) -> Optional[Dict[str, Any]]:
-    """Run catalogued German city location/map workflows without the ReAct loop."""
-    if "twa-city" not in route.mcp_servers and route.domain != "city":
-        return None
-
-    from demos.german_city_specs import is_location_workflow_spec, lookup_german_city_question
+    *,
+    workflow_name: str,
+    parameters: Dict[str, Any],
+    catalog_entry_id: Optional[str] = None,
+    reason: str,
+) -> Dict[str, Any]:
     from mini_marie.kgqa.recording_utils import extract_from_text
     from mini_marie.zaha.twa_city.workflow_mcp import run_workflow_online
 
-    spec = lookup_german_city_question(question)
-    if not spec or not is_location_workflow_spec(spec):
-        return None
-
-    workflow_name = str(spec.get("workflow") or "city_ranked_buildings")
-    parameters = dict(spec.get("parameters") or {})
-    city = str(parameters.get("city") or spec.get("city_key") or "")
-
+    city = str(parameters.get("city") or "")
     t0 = time.perf_counter()
     tool_content = run_workflow_online(
         workflow_name,
@@ -902,13 +976,16 @@ def _try_direct_city_workflow(
     if offline_path:
         payload = load_offline_payload(offline_path)
         if payload:
-            display_rows = _table_rows_from_offline_payload(payload) or _wkt_rows_from_offline_payload(payload)
+            display_rows = (
+                _answer_rows_from_offline_payload(payload)
+                or _wkt_rows_from_offline_payload(payload)
+            )
 
-    online_answer = _summarize_city_workflow_rows(display_rows, city=city or spec.get("city_label", "city"))
+    online_answer = _summarize_city_workflow_rows(display_rows, city=city or "city")
     if not display_rows:
         online_answer = (
-            f"Ran `{workflow_name}` for {city or 'city'} with building locations requested. "
-            "Results will appear in the table and map once offline replay completes."
+            f"Ran `{workflow_name}` for {city or 'city'}. "
+            "Results will appear in the table once offline replay completes."
         )
 
     metadata: Dict[str, Any] = {
@@ -917,7 +994,7 @@ def _try_direct_city_workflow(
             "executed_tool_names": ["run_workflow_online"],
         },
         "workflow_id": workflow_name,
-        "catalog_entry_id": spec.get("id"),
+        "catalog_entry_id": catalog_entry_id,
         "workflow_parameters": parameters,
     }
 
@@ -929,8 +1006,8 @@ def _try_direct_city_workflow(
             "mcp_servers": route.mcp_servers,
             "domain": route.domain,
             "domains": route.domains,
-            "reason": f"direct city workflow {workflow_name} ({spec.get('id')})",
-            "catalog_entry": None,
+            "reason": reason,
+            "catalog_entry": route.catalog_entry,
         },
         "offline": offline_result,
         "offline_recording_path": offline_path,
@@ -938,6 +1015,49 @@ def _try_direct_city_workflow(
         "workflow_id": workflow_name,
         "timing": {"online_ms": online_ms, "offline_ms": offline_ms},
     }
+
+
+def _try_direct_city_workflow(
+    question: str,
+    route: RouteResult,
+) -> Optional[Dict[str, Any]]:
+    """Run catalogued German city workflows without the ReAct loop."""
+    if "twa-city" not in route.mcp_servers and route.domain != "city":
+        return None
+
+    from demos.german_city_specs import (
+        is_workflow_spec,
+        lookup_german_city_question,
+        resolve_city_workflow_parameters,
+    )
+
+    spec = lookup_german_city_question(question)
+    if spec and is_workflow_spec(spec):
+        workflow_name = str(spec.get("workflow") or "city_ranked_buildings")
+        parameters = resolve_city_workflow_parameters(question, workflow_name, spec=spec)
+        return _run_direct_city_workflow(
+            question,
+            route,
+            workflow_name=workflow_name,
+            parameters=parameters,
+            catalog_entry_id=str(spec.get("id") or ""),
+            reason=f"direct city workflow {workflow_name} ({spec.get('id')})",
+        )
+
+    for entry in _catalog_entries_from_route(route):
+        if entry.domain != "city" or not entry.workflow_id:
+            continue
+        workflow_name = str(entry.workflow_id)
+        parameters = resolve_city_workflow_parameters(question, workflow_name)
+        return _run_direct_city_workflow(
+            question,
+            route,
+            workflow_name=workflow_name,
+            parameters=parameters,
+            catalog_entry_id=entry.id,
+            reason=f"direct city workflow {workflow_name} ({entry.id})",
+        )
+    return None
 
 
 def _try_direct_cross_domain(
@@ -1375,14 +1495,35 @@ def stream_marie_chat_events(qa_request_id: str) -> Generator[str, None, None]:
     yield from stream_chat_events(question, data_items, narrative=narrative)
 
 
-def _extract_table_snippet(item: Dict[str, Any]) -> str:
+def _extract_table_snippet(item: Dict[str, Any], question: str = "") -> str:
+    """Natural-language snippet from a table — never dump raw JSON into chat."""
+    from demos.twa_format import _looks_like_raw_json, _narrative_from_data, _summarize_metric_row
+
     rows = item.get("data") or item.get("bindings") or []
     if not rows:
         return ""
     vars_ = item.get("vars") or item.get("columns") or []
     if vars_ == ["answer"] and len(rows) == 1:
-        return str(rows[0].get("answer", "")).strip()
-    return json.dumps(rows[0], ensure_ascii=False)[:500]
+        answer = str(rows[0].get("answer", "")).strip()
+        if answer and not _looks_like_raw_json(answer):
+            return answer
+    row0 = rows[0] if isinstance(rows[0], dict) else None
+    if row0:
+        metric = _summarize_metric_row(row0, question)
+        if metric:
+            return metric
+    nl = _narrative_from_data(question, [item])
+    if nl:
+        return nl
+    # Last resort: readable key/value prose, still not JSON braces.
+    if row0:
+        bits = [
+            f"{k.replace('_', ' ')} {v}"
+            for k, v in row0.items()
+            if v not in (None, "") and "wkt" not in str(k).lower()
+        ]
+        return "Result: " + "; ".join(bits[:8]) + "." if bits else ""
+    return ""
 
 
 def stream_chat_events(
@@ -1392,21 +1533,30 @@ def stream_chat_events(
     narrative: Optional[str] = None,
 ) -> Generator[str, None, None]:
     """SSE stream matching Zaha/Marie ./chat contract."""
+    from demos.twa_format import _looks_like_raw_json, _narrative_from_data
+
     text = (narrative or "").strip()
+    # Reject raw JSON / dict dumps that sometimes leak from the agent path.
+    if text and _looks_like_raw_json(text):
+        text = ""
     if not text:
-        snippets: List[str] = []
-        for item in data_items:
-            if item.get("type") == "table":
-                snippet = _extract_table_snippet(item)
-                if snippet:
-                    snippets.append(snippet)
-            elif item.get("type") == "map":
-                snippets.append(f"Map: {item.get('title') or 'geometry'}")
-        text = (
-            "\n\n".join(snippets)
-            if snippets
-            else "No tabular results were returned."
-        )
+        nl = _narrative_from_data(question, data_items)
+        if nl:
+            text = nl
+        else:
+            snippets: List[str] = []
+            for item in data_items:
+                if item.get("type") == "table":
+                    snippet = _extract_table_snippet(item, question)
+                    if snippet:
+                        snippets.append(snippet)
+                elif item.get("type") == "map":
+                    snippets.append(f"Map: {item.get('title') or 'geometry'}")
+            text = (
+                "\n\n".join(snippets)
+                if snippets
+                else "No tabular results were returned."
+            )
 
     started = time.perf_counter()
     # First chunk empty-ish then word stream (matches frontend trimStart behavior)

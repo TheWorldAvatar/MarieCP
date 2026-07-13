@@ -5,6 +5,7 @@
   python -m demos.warm_german_city_caches --ubem
   python -m demos.warm_german_city_caches --ontop
   python -m demos.warm_german_city_caches --all-page
+  python -m demos.warm_german_city_caches --full-fast
 """
 
 from __future__ import annotations
@@ -28,6 +29,11 @@ def main() -> None:
     parser.add_argument("--ubem", action="store_true", help="Also warm Pirmasens UBEM row pools (slow)")
     parser.add_argument("--ontop", action="store_true", help="Warm Pirmasens Ontop cache (toilet/plots/solar)")
     parser.add_argument("--all-page", action="store_true", help="Warm city_cache + pirmasens_ontop for page")
+    parser.add_argument(
+        "--full-fast",
+        action="store_true",
+        help="Warm all 24 md CQs + 8 city named queries + city page atomics/locations",
+    )
     parser.add_argument("--atomics-only", action="store_true", help="Skip WKT location batches")
     args = parser.parse_args()
 
@@ -40,8 +46,17 @@ def main() -> None:
         _run([py, "-m", ontop_mod, "--status"])
         raise SystemExit(code)
 
-    if args.all_page:
+    if args.all_page or args.full_fast:
         args.ontop = True
+
+    if args.full_fast:
+        code = _run([py, "-m", ontop_mod, "--full-fast", "--missing-only"])
+        if code:
+            raise SystemExit(code)
+        code = _run(
+            [py, "-m", city_mod, "--page-questions", "--atomics-only", "--missing-only"]
+        )
+        raise SystemExit(code)
 
     if args.ontop and not args.all_page:
         code = _run([py, "-m", ontop_mod, "--page-questions", "--missing-only"])

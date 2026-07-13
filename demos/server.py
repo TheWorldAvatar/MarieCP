@@ -33,6 +33,7 @@ from flask import Flask, Response, jsonify, redirect, render_template, request, 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 STATIC_ROOT = Path(__file__).resolve().parent / "static"
 MARIE_CLASSIC_ROOT = Path(__file__).resolve().parent / "marie-classic"
+ZAHA_CLASSIC_ROOT = Path(__file__).resolve().parent / "zaha-classic"
 HUB_ROOT = Path(__file__).resolve().parent / "hub"
 
 if str(REPO_ROOT) not in sys.path:
@@ -470,20 +471,39 @@ def marie_classic_static(subpath: str = ""):
 # --- static Zaha ---
 
 
+def _ensure_zaha_index(zaha_root: Path) -> None:
+    """Keep /demos/zaha/ on the Zaha UI (never serve the Marie classic HTML by mistake)."""
+    index = zaha_root / "index.html"
+    source = ZAHA_CLASSIC_ROOT / "index.html"
+    if not source.is_file():
+        return
+    text = index.read_text(encoding="utf-8", errors="replace") if index.is_file() else ""
+    looks_like_marie = "<title>Marie</title>" in text or "Marie Curie" in text
+    if (not index.is_file()) or looks_like_marie:
+        zaha_root.mkdir(parents=True, exist_ok=True)
+        index.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+
+
 @app.route("/demos/zaha/")
 @app.route("/demos/zaha/<path:subpath>")
 def zaha_static(subpath: str = ""):
     zaha_root = STATIC_ROOT / "zaha"
-    if not zaha_root.exists():
+    if not zaha_root.exists() and not ZAHA_CLASSIC_ROOT.exists():
         return (
-            "Zaha static mirror missing. Run: python -m demos.mirror",
+            "Zaha static missing. Run: python -m demos.mirror  (or keep demos/zaha-classic/)",
             503,
         )
+    zaha_root.mkdir(parents=True, exist_ok=True)
     if not subpath:
+        _ensure_zaha_index(zaha_root)
         return send_from_directory(zaha_root, "index.html")
     target = zaha_root / subpath
     if target.is_file():
         return send_from_directory(zaha_root, subpath)
+    # Fall back to committed classic assets when the mirror is incomplete.
+    classic_target = ZAHA_CLASSIC_ROOT / subpath
+    if classic_target.is_file():
+        return send_from_directory(ZAHA_CLASSIC_ROOT, subpath)
     return ("Not found", 404)
 
 

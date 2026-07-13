@@ -26,10 +26,11 @@ services:
       MARIE_FRONTEND_PROXY: "0"
       DEMO_AUTO_OFFLINE: "${DEMO_AUTO_OFFLINE:-true}"
       DEMO_FORCE_REFRESH: "${DEMO_FORCE_REFRESH:-false}"
+      ONLINE_SPARQL_DELAY_SECONDS: "${ONLINE_SPARQL_DELAY_SECONDS:-3}"
       DEMO_MIRROR_ON_START: "${DEMO_MIRROR_ON_START:-1}"
       DEMO_LLM_MODEL: "${DEMO_LLM_MODEL:-gpt-4o}"
       FLASK_SECRET_KEY: "${FLASK_SECRET_KEY:-dev-secret}"
     volumes:
-      - ${MARIECP_DATA:-../data}:/data
+      - ${MARIECP_DATA:-D:/mini_marie_data/data}:/data
     extra_hosts:
       - "host.docker.internal:host-gateway"

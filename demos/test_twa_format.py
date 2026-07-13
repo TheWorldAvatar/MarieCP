@@ -140,8 +140,67 @@ def test_narrative_rule_uses_sg_summary():
     }
     data = build_twa_data(kgqa)
     text = build_twa_narrative_rule(kgqa["question"], kgqa, data)
-    assert "5678" in text
+    assert "5678" in text.replace(",", "")
     assert "office" in text.lower()
+    assert "{" not in text
+
+
+def test_narrative_rule_rewrites_heat_supply_json():
+    question = (
+        "What is the min, max, and average annual heat supply (kWh/m²) "
+        "from Pirmasens thermal collector UBEM?"
+    )
+    row = {
+        "avg_kwh_per_m2": "385.6608403915137",
+        "max_kwh_per_m2": "747",
+        "measure_count": "267066",
+        "min_kwh_per_m2": "93",
+    }
+    kgqa = {
+        "question": question,
+        "online_answer": json.dumps(row),
+        "metadata": {"tool_activity": {}},
+        "timing": {"online_ms": 1},
+    }
+    data = [
+        {
+            "type": "table",
+            "vars": list(row.keys()),
+            "bindings": [row],
+        }
+    ]
+    text = build_twa_narrative_rule(question, kgqa, data)
+    assert "{" not in text
+    assert "93" in text
+    assert "747" in text
+    assert "kWh" in text
+    assert "Pirmasens" in text
+
+
+def test_stream_chat_rejects_raw_json_narrative():
+    from demos.twa_adapter import stream_chat_events
+
+    row = {
+        "min_kwh_per_m2": "93",
+        "max_kwh_per_m2": "747",
+        "avg_kwh_per_m2": "385.66",
+        "measure_count": "267066",
+    }
+    chunks = list(
+        stream_chat_events(
+            "What is the min, max, and average annual heat supply from Pirmasens?",
+            [{"type": "table", "vars": list(row.keys()), "bindings": [row]}],
+            narrative=json.dumps(row),
+        )
+    )
+    body = "".join(
+        json.loads(c[len("data: ") :].strip())["content"]
+        for c in chunks
+        if c.startswith("data: ")
+    )
+    assert "{" not in body
+    assert "93" in body
+    assert "747" in body
 
 
 def test_kgqa_result_to_twa_shape():

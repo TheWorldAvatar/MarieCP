@@ -44,6 +44,18 @@ PIRMASENS_CITY_PAGE_QUERY_FILES: List[str] = [
     "15_property_coverage.sparql",
 ]
 
+# All named .sparql files under queries/pirmasens/ (page subset + extra probes).
+PIRMASENS_ALL_CITY_QUERY_FILES: List[str] = [
+    "14_usage_type_counts.sparql",
+    "15_property_coverage.sparql",
+    "class_overview.sparql",
+    "co2_savings_stats.sparql",
+    "device_type_counts.sparql",
+    "heat_supply_stats.sparql",
+    "radiation_stats.sparql",
+    "ubem_class_counts.sparql",
+]
+
 CASES: List[Dict[str, Any]] = [
     {
         "id": "TO-CQ01",
@@ -367,6 +379,23 @@ def page_ontop_warm_specs() -> List[Dict[str, Any]]:
                     "query": case["query"].strip(),
                 },
                 "label": f"{de_id}/{md_id}",
+            }
+        )
+    return specs
+
+
+def md_all_warm_specs() -> List[Dict[str, Any]]:
+    """Warm specs for all 24 pirmasens.md competency cases (toilet / plots / solarthermie)."""
+    specs: List[Dict[str, Any]] = []
+    for case in CASES:
+        specs.append(
+            {
+                "tool": "run_sparql",
+                "args": {
+                    "endpoint_id": case["domain"],
+                    "query": case["query"].strip(),
+                },
+                "label": str(case["id"]),
             }
         )
     return specs

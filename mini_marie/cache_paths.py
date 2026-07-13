@@ -68,7 +68,11 @@ def data_dir() -> Path:
     if override:
         path = _normalize_data_path(Path(override))
     else:
-        path = repo_root() / "data"
+        win_default = Path("D:/mini_marie_data/data")
+        if win_default.is_dir():
+            path = win_default
+        else:
+            path = repo_root() / "data"
     path.mkdir(parents=True, exist_ok=True)
     return path
 

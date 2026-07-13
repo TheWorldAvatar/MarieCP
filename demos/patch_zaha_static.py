@@ -79,6 +79,7 @@ def patch_html(text: str) -> str:
 
 def patch_all(root: Path = ZAHA_ROOT) -> int:
     count = 0
+    count += restore_zaha_index(root)
     for html in root.rglob("*.html"):
         original = html.read_text(encoding="utf-8", errors="replace")
         patched = patch_html(original)
@@ -100,6 +101,21 @@ def patch_all(root: Path = ZAHA_ROOT) -> int:
     except Exception as exc:
         print(f"  warn: mop patch skipped: {exc}")
     return count
+
+
+def restore_zaha_index(root: Path = ZAHA_ROOT) -> int:
+    """If mirrored Zaha index was overwritten by Marie HTML, restore from zaha-classic."""
+    source = Path(__file__).resolve().parent / "zaha-classic" / "index.html"
+    index = root / "index.html"
+    if not source.is_file():
+        return 0
+    text = index.read_text(encoding="utf-8", errors="replace") if index.is_file() else ""
+    if index.is_file() and "<title>Zaha</title>" in text and "Marie Curie" not in text:
+        return 0
+    root.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, index)
+    print(f"  restored zaha index.html from zaha-classic")
+    return 1
 
 
 def sync_shared_script(root: Path = ZAHA_ROOT) -> int:
