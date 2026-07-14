@@ -32,6 +32,7 @@ def test_hub_routes():
     assert "Marie" in body and "Zaha" in body and "Elisa" in body
     assert "/demos/hub/portraits/elisa.png" in body
     assert 'href="https://qa.theworldavatar.io/"' in body
+    assert "advanced UI" not in body
     assert "RAG" not in body
 
     resp = client.get("/demos/elisa/")
