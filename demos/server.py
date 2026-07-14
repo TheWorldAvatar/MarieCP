@@ -113,8 +113,10 @@ def _marie_frontend_base() -> str:
 
 
 def _elisa_frontend_base() -> str:
-    """Local Elisa UI (FastAPI on port 8000 by default)."""
-    return os.environ.get("ELISA_FRONTEND_URL", "http://127.0.0.1:8000").rstrip("/")
+    """Elisa UI — production QA host; override for local RAG (port 8000)."""
+    return os.environ.get(
+        "ELISA_FRONTEND_URL", "https://qa.theworldavatar.io"
+    ).rstrip("/")
 
 
 def _render_demo_hub():
@@ -122,7 +124,7 @@ def _render_demo_hub():
         "hub.html",
         marie_url="/demos/marie-classic/",
         zaha_url="/demos/zaha/",
-        elisa_url="/demos/elisa/",
+        elisa_url=f"{_elisa_frontend_base()}/",
     )
 
 
