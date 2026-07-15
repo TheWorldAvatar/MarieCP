@@ -92,7 +92,27 @@ MOF_KEYWORDS = [
     "dut-67",
 ]
 
-CITY_KEYWORDS = ["bremen", "kaiserslautern", "wkt", "geo", "city"]
+CITY_KEYWORDS = [
+    "bremen",
+    "kaiserslautern",
+    "pirmasens",
+    "ubem",
+    "heat",
+    "co2",
+    "wkt",
+    "geo",
+    "city",
+    "toilet",
+    "toilets",
+    "plot",
+    "plots",
+    "zoning",
+    "grz",
+    "bmz",
+    "solarthermie",
+    "solar thermal",
+    "collector",
+]
 
 MOPS_KEYWORDS = [
     "vmop",

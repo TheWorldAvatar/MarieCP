@@ -48,6 +48,12 @@
     "tools": ["get_building_count"]
   },
   {
+    "id": "XQ11",
+    "question": "For Pirmasens: how many CityGML buildings vs DABGEO UBEM buildings, and what is average annual heat supply?",
+    "domains": ["city"],
+    "tools": ["get_building_count", "get_property_coverage", "get_heat_supply_stats"]
+  },
+  {
     "id": "XQ09",
     "question": "Sample Singapore emissions with numerical values — do they use OM-2 hasNumericalValue?",
     "domains": ["sg_kb"],

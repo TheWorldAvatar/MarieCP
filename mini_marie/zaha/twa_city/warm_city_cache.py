@@ -17,11 +17,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from typing import Any, Dict, List
 
 from mini_marie.zaha.twa_city.atomic_warm_manifest import (
+    CITIES,
+    GERMAN_PAGE_LOCATIONS_TOP_N,
     cities_for_comprehensive_warm,
-    comprehensive_warm_specs,
+    specs_for_city,
     workflow_driven_warm_specs,
 )
 from mini_marie.zaha.twa_city.city_cache import (
@@ -30,7 +33,10 @@ from mini_marie.zaha.twa_city.city_cache import (
     warm_locations_for_city,
     warm_locations_top_n,
 )
-from mini_marie.warm_manifest import specs_missing_full_tier
+from mini_marie.zaha.twa_city.limits import warm_delay_seconds
+from mini_marie.warm_manifest import is_resolved_warm_spec, specs_missing_full_tier
+
+UBEM_ATOMIC_TOOLS = frozenset({"list_dabgeo_heat_supply", "list_dabgeo_co2_savings"})
 
 
 def warm_city(
@@ -49,6 +55,7 @@ def warm_city(
     ck = CityCache()
     try:
         city_specs = [s for s in specs if (s.get("args") or {}).get("city", "").lower() == city.lower()]
+        city_specs = [s for s in city_specs if is_resolved_warm_spec(s)]
         if missing_only and not force:
             before = len(city_specs)
             city_specs = specs_missing_full_tier(city_specs, has_full=ck.has_full)
@@ -79,6 +86,10 @@ def warm_city(
                         **meta,
                     }
                 )
+                if i < len(city_specs):
+                    delay = warm_delay_seconds()
+                    if delay > 0 and not meta.get("from_cache"):
+                        time.sleep(delay)
         elif city_specs:
             print(f"  atomics skipped ({len(city_specs)} specs not run)", flush=True)
 
@@ -160,6 +171,16 @@ def main() -> None:
         action="store_true",
         help="Print cache progress and exit",
     )
+    parser.add_argument(
+        "--page-questions",
+        action="store_true",
+        help="Warm atomics + top-N WKT for Zaha German-city dropdown (Bremen/KL/Pirmasens)",
+    )
+    parser.add_argument(
+        "--include-ubem",
+        action="store_true",
+        help="With --page-questions: also warm Pirmasens UBEM row pools (slow; 100k+ rows)",
+    )
     args = parser.parse_args()
 
     if args.status:
@@ -169,15 +190,20 @@ def main() -> None:
         return
 
     comprehensive = args.comprehensive or args.all
-    if comprehensive:
+    page_questions = args.page_questions
+    if page_questions:
+        cities = list(CITIES)
+        specs = workflow_driven_warm_specs()
+        args.missing_only = True
+    elif comprehensive:
         cities = cities_for_comprehensive_warm()
         specs = workflow_driven_warm_specs()
     else:
         cities = args.city or []
-        specs = comprehensive_warm_specs() if cities else []
+        specs = workflow_driven_warm_specs() if cities else []
 
     if not cities:
-        raise SystemExit("Provide --city <slug>, --comprehensive, or --status")
+        raise SystemExit("Provide --city <slug>, --comprehensive, --page-questions, or --status")
 
     include_atomics = not args.locations_only
     include_locations = not (args.no_locations or args.atomics_only)
@@ -190,31 +216,49 @@ def main() -> None:
         raise SystemExit("--locations-top-n must be >= 1")
     if locations_top_n is not None:
         include_locations = True
-        if not args.comprehensive and not args.locations_only:
+        if not comprehensive and not args.locations_only and not page_questions:
             include_atomics = False  # height facet already warmed; avoid full-city location grind
+    if page_questions and not args.atomics_only and not args.locations_only:
+        include_atomics = True
+        include_locations = True
 
     results = []
     for ci, city in enumerate(cities, 1):
+        city_locations_top_n = locations_top_n
+        if page_questions and city_locations_top_n is None:
+            city_locations_top_n = GERMAN_PAGE_LOCATIONS_TOP_N.get(city.lower())
         loc_mode = (
-            f"top_n={locations_top_n}"
-            if locations_top_n is not None
+            f"top_n={city_locations_top_n}"
+            if city_locations_top_n is not None
             else ("full" if include_locations else "off")
+        )
+        mode_label = (
+            "page-questions"
+            if page_questions
+            else ("comprehensive" if comprehensive else "city")
         )
         print(
             f"[{ci}/{len(cities)}] Warming {city} "
-            f"({'comprehensive' if comprehensive else 'city'}) "
+            f"({mode_label}) "
             f"atomics={include_atomics} locations={loc_mode} ...",
             flush=True,
         )
-        city_specs = specs if comprehensive else [s for s in specs if s["args"].get("city") == city]
-        if not city_specs and comprehensive:
-            city_specs = [s for s in comprehensive_warm_specs() if s["args"].get("city") == city]
+        if page_questions or comprehensive:
+            city_specs = [s for s in specs if (s.get("args") or {}).get("city", "").lower() == city.lower()]
+            if not city_specs:
+                city_specs = specs_for_city(city)
+            if page_questions and not args.include_ubem:
+                city_specs = [s for s in city_specs if s.get("tool") not in UBEM_ATOMIC_TOOLS]
+        else:
+            city_specs = [s for s in specs if (s.get("args") or {}).get("city", "").lower() == city.lower()]
+        if not city_specs:
+            city_specs = specs_for_city(city)
         out = warm_city(
             city,
-            city_specs or comprehensive_warm_specs(),
+            city_specs,
             include_atomics=include_atomics,
             include_locations=include_locations,
-            locations_top_n=locations_top_n,
+            locations_top_n=city_locations_top_n,
             locations_usage_type=args.locations_usage_type,
             force=args.force,
             missing_only=args.missing_only,

@@ -1,0 +1,329 @@
+{
+  "_pattern": {
+    "numeric_threshold": [
+      "1. Atomic extract: full IRI + numeric column (e.g. list_buildings_with_height, list_dabgeo_heat_supply)",
+      "2. filter_rows on the row pool with $min_height_m / $min_heat_kwh_per_m2 (mini_marie.row_filters)"
+    ],
+    "ranking": [
+      "1. Atomic extract: full IRI + sortable numeric column",
+      "2. Optional filter_rows",
+      "3. top_n_by_field (not SPARQL ORDER BY + threshold)"
+    ],
+    "corpus_stats": [
+      "Aggregate min/max/avg over full graph via dedicated stats tools (get_height_stats, get_heat_supply_stats)"
+    ]
+  },
+  "questions": [
+    {
+      "id": "PQ01",
+      "question": "How many CityGML buildings are in the Pirmasens TWA graph?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["get_building_count"],
+      "tags": ["pirmasens", "corpus"],
+      "difficulty": "easy",
+      "probe_sequence": ["corpus_count"]
+    },
+    {
+      "id": "PQ02",
+      "question": "What is the minimum, maximum, and average measuredHeight for Pirmasens buildings?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["get_height_stats"],
+      "tags": ["pirmasens", "height", "corpus_stats"],
+      "difficulty": "easy",
+      "probe_sequence": ["corpus_stats"]
+    },
+    {
+      "id": "PQ03",
+      "question": "For Pirmasens, how many buildings have height, usage, geometry, storeys, or labels?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["get_property_coverage"],
+      "tags": ["pirmasens", "coverage"],
+      "difficulty": "easy",
+      "probe_sequence": ["corpus_coverage"]
+    },
+    {
+      "id": "PQ04",
+      "question": "What are the most common building usage types in Pirmasens?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["get_usage_type_counts"],
+      "tags": ["pirmasens", "usage"],
+      "difficulty": "easy",
+      "probe_sequence": ["corpus_group_by"]
+    },
+    {
+      "id": "PQ05",
+      "question": "What are the seven tallest buildings in Pirmasens?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_workflow_online", "replay_workflow_offline"],
+      "workflow_id": "city_ranked_buildings",
+      "parameters": { "city": "pirmasens", "top_n": 7, "sort_field": "height", "sort_order": "desc" },
+      "tags": ["pirmasens", "ranking"],
+      "difficulty": "easy",
+      "probe_sequence": ["list_buildings_with_height", "top_n_by_field"]
+    },
+    {
+      "id": "PQ06",
+      "question": "List the tallest domestic buildings in Pirmasens.",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_workflow_online", "replay_workflow_offline"],
+      "workflow_id": "city_ranked_buildings",
+      "parameters": {
+        "city": "pirmasens",
+        "top_n": 10,
+        "sort_field": "height",
+        "usage_type": "Domestic"
+      },
+      "tags": ["pirmasens", "usage", "ranking"],
+      "difficulty": "medium",
+      "probe_sequence": ["list_buildings_with_height", "filter_rows:usage_type", "top_n_by_field"]
+    },
+    {
+      "id": "PQ07",
+      "question": "List the tallest industrial buildings in Pirmasens.",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_workflow_online", "replay_workflow_offline"],
+      "workflow_id": "city_ranked_buildings",
+      "parameters": {
+        "city": "pirmasens",
+        "top_n": 10,
+        "sort_field": "height",
+        "usage_type": "IndustrialFacility"
+      },
+      "tags": ["pirmasens", "usage", "ranking"],
+      "difficulty": "medium",
+      "probe_sequence": ["list_buildings_with_height", "filter_rows:usage_type", "top_n_by_field"]
+    },
+    {
+      "id": "PQ08",
+      "question": "Find the locations of the twelve highest buildings in Pirmasens (footprint WKT).",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_workflow_online", "replay_workflow_offline"],
+      "workflow_id": "city_ranked_buildings",
+      "parameters": {
+        "city": "pirmasens",
+        "top_n": 12,
+        "sort_field": "height",
+        "include_locations": true
+      },
+      "tags": ["pirmasens", "geo", "workflow"],
+      "difficulty": "medium",
+      "probe_sequence": ["list_buildings_with_height", "top_n_by_field", "fetch_building_locations"]
+    },
+    {
+      "id": "PQ09",
+      "question": "Eight tallest buildings in Pirmasens: where are they and what usage type does each have?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_workflow_online", "replay_workflow_offline"],
+      "workflow_id": "city_ranked_buildings",
+      "parameters": {
+        "city": "pirmasens",
+        "top_n": 8,
+        "sort_field": "height",
+        "include_locations": true
+      },
+      "tags": ["pirmasens", "ranking", "geo"],
+      "difficulty": "medium",
+      "probe_sequence": ["list_buildings_with_height", "top_n_by_field", "fetch_building_locations"]
+    },
+    {
+      "id": "PQ10",
+      "question": "Show a map of the tallest Pirmasens building footprints.",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_workflow_online", "replay_workflow_offline"],
+      "workflow_id": "city_ranked_buildings",
+      "parameters": {
+        "city": "pirmasens",
+        "top_n": 12,
+        "sort_field": "height",
+        "sort_order": "desc",
+        "include_locations": true
+      },
+      "tags": ["pirmasens", "map", "geo"],
+      "difficulty": "medium",
+      "probe_sequence": ["list_buildings_with_height", "top_n_by_field", "fetch_building_locations"]
+    },
+    {
+      "id": "PQ11",
+      "question": "How many DABGEO/OEMA buildings and UBEM devices are in the Pirmasens graph?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["get_property_coverage"],
+      "tags": ["pirmasens", "ubem", "coverage"],
+      "difficulty": "easy",
+      "probe_sequence": ["corpus_coverage"]
+    },
+    {
+      "id": "PQ12",
+      "question": "What ontoubemmp classes exist in Pirmasens and how many instances does each have?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["get_ubem_class_counts"],
+      "tags": ["pirmasens", "ubem", "schema"],
+      "difficulty": "easy",
+      "probe_sequence": ["corpus_group_by"]
+    },
+    {
+      "id": "PQ13",
+      "question": "What collector device types are modelled on Pirmasens DABGEO buildings?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["get_device_type_counts"],
+      "tags": ["pirmasens", "ubem", "devices"],
+      "difficulty": "easy",
+      "probe_sequence": ["corpus_group_by"]
+    },
+    {
+      "id": "PQ14",
+      "question": "What is the min, max, and average annual heat supply (kWh/m²) from Pirmasens thermal collector UBEM?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["get_heat_supply_stats"],
+      "tags": ["pirmasens", "ubem", "heat", "corpus_stats"],
+      "difficulty": "easy",
+      "probe_sequence": ["corpus_stats"]
+    },
+    {
+      "id": "PQ15",
+      "question": "What is the min, max, and average modelled annual CO2 savings from Pirmasens solar collectors?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["get_co2_savings_stats"],
+      "tags": ["pirmasens", "ubem", "co2", "corpus_stats"],
+      "difficulty": "easy",
+      "probe_sequence": ["corpus_stats"]
+    },
+    {
+      "id": "PQ16",
+      "question": "What is the min, max, and average received radiation (Radabshz) for Pirmasens solar devices?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["get_radiation_stats"],
+      "tags": ["pirmasens", "ubem", "radiation", "corpus_stats"],
+      "difficulty": "easy",
+      "probe_sequence": ["corpus_stats"]
+    },
+    {
+      "id": "PQ17",
+      "question": "Which five Pirmasens DABGEO buildings have the highest annual heat supply from thermal collectors?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_workflow_online", "replay_workflow_offline"],
+      "workflow_id": "pirmasens_ubem_ranked",
+      "parameters": { "city": "pirmasens", "top_n": 5, "sort_field": "heat_kwh_per_m2" },
+      "tags": ["pirmasens", "ubem", "heat", "ranking"],
+      "difficulty": "medium",
+      "probe_sequence": ["list_dabgeo_heat_supply", "top_n_by_field"]
+    },
+    {
+      "id": "PQ18",
+      "question": "Which six Pirmasens buildings have the highest modelled CO2 savings from solar collectors?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_workflow_online", "replay_workflow_offline"],
+      "workflow_id": "pirmasens_ubem_co2_ranked",
+      "parameters": { "city": "pirmasens", "top_n": 6, "sort_field": "co2_savings" },
+      "tags": ["pirmasens", "ubem", "co2", "ranking"],
+      "difficulty": "medium",
+      "probe_sequence": ["list_dabgeo_co2_savings", "top_n_by_field"]
+    },
+    {
+      "id": "PQ19",
+      "question": "Show a sample of Pirmasens solar collectors with both CO2 savings and radiation values.",
+      "mcp_servers": ["twa-city"],
+      "tools": ["get_solar_collector_sample"],
+      "tags": ["pirmasens", "ubem", "solar", "sample"],
+      "difficulty": "medium",
+      "probe_sequence": ["atomic_sample"]
+    },
+    {
+      "id": "PQ20",
+      "question": "Look up the UBEM energy profile for the Pirmasens DABGEO building with the highest annual heat supply.",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_workflow_online", "get_building_ubem_profile"],
+      "workflow_id": "pirmasens_ubem_ranked",
+      "parameters": { "city": "pirmasens", "top_n": 1, "sort_field": "heat_kwh_per_m2" },
+      "tags": ["pirmasens", "ubem", "lookup", "chain"],
+      "difficulty": "hard",
+      "probe_sequence": ["list_dabgeo_heat_supply", "top_n_by_field", "get_building_ubem_profile"]
+    },
+    {
+      "id": "PQ21",
+      "question": "Summarize the Pirmasens data layers with live counts from the endpoint (CityGML, DABGEO/OEMA, UBEM).",
+      "mcp_servers": ["twa-city"],
+      "tools": ["get_pirmasens_schema_summary"],
+      "tags": ["pirmasens", "schema"],
+      "difficulty": "easy",
+      "probe_sequence": ["corpus_stats", "corpus_coverage"]
+    },
+    {
+      "id": "PQ22",
+      "question": "What are the top RDF classes in the Pirmasens knowledge graph?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["get_class_overview"],
+      "tags": ["pirmasens", "schema"],
+      "difficulty": "medium",
+      "probe_sequence": ["corpus_group_by"]
+    },
+    {
+      "id": "PQ23",
+      "question": "Compare Pirmasens CityGML building count with DABGEO building count — what does each layer represent?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["get_building_count", "get_property_coverage", "get_pirmasens_schema_summary"],
+      "tags": ["pirmasens", "comparison"],
+      "difficulty": "hard",
+      "probe_sequence": ["corpus_count", "corpus_coverage"]
+    },
+    {
+      "id": "PQ24",
+      "question": "What properties does the tallest CityGML building in Pirmasens have?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_workflow_online", "get_building_properties"],
+      "workflow_id": "city_ranked_buildings",
+      "parameters": { "city": "pirmasens", "top_n": 1, "sort_field": "height" },
+      "tags": ["pirmasens", "lookup", "chain"],
+      "difficulty": "medium",
+      "probe_sequence": ["list_buildings_with_height", "top_n_by_field", "get_building_properties"]
+    },
+    {
+      "id": "PQ25",
+      "question": "Which Pirmasens multi-residential buildings are tallest?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_workflow_online", "replay_workflow_offline"],
+      "workflow_id": "city_ranked_buildings",
+      "parameters": {
+        "city": "pirmasens",
+        "top_n": 10,
+        "sort_field": "height",
+        "usage_type": "MultiResidential"
+      },
+      "tags": ["pirmasens", "usage", "ranking"],
+      "difficulty": "medium",
+      "probe_sequence": ["list_buildings_with_height", "filter_rows:usage_type", "top_n_by_field"]
+    },
+    {
+      "id": "PQ26",
+      "question": "Which Pirmasens buildings are taller than 60 metres?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_workflow_online", "replay_workflow_offline"],
+      "workflow_id": "pirmasens_buildings_height_filter",
+      "parameters": { "city": "pirmasens", "min_height_m": 60 },
+      "tags": ["pirmasens", "filter", "height"],
+      "difficulty": "medium",
+      "probe_sequence": ["list_buildings_with_height", "filter_rows:height>=$min_height_m"]
+    },
+    {
+      "id": "PQ27",
+      "question": "Which Pirmasens DABGEO buildings have annual heat supply above 500 kWh/m²?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_workflow_online", "replay_workflow_offline"],
+      "workflow_id": "pirmasens_ubem_heat_filter",
+      "parameters": { "city": "pirmasens", "min_heat_kwh_per_m2": 500 },
+      "tags": ["pirmasens", "ubem", "heat", "filter"],
+      "difficulty": "medium",
+      "probe_sequence": ["list_dabgeo_heat_supply", "filter_rows:heat_kwh_per_m2>=$min_heat_kwh_per_m2"]
+    },
+    {
+      "id": "PQ28",
+      "question": "Among the top three Pirmasens buildings by CO2 savings, what radiation values do their solar collectors receive?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_workflow_online", "get_building_ubem_profile"],
+      "workflow_id": "pirmasens_ubem_co2_ranked",
+      "parameters": { "city": "pirmasens", "top_n": 3, "sort_field": "co2_savings" },
+      "tags": ["pirmasens", "ubem", "chain"],
+      "difficulty": "hard",
+      "probe_sequence": ["list_dabgeo_co2_savings", "top_n_by_field", "get_building_ubem_profile"]
+    }
+  ]
+}

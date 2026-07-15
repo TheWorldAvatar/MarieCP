@@ -74,30 +74,78 @@ def _table_rows(item: Dict[str, Any]) -> List[Dict[str, Any]]:
     return list(item.get("bindings") or item.get("data") or [])
 
 
+TWA_ABOX_IRI_PREFIXES = [
+    "http://www.theworldavatar.com/kb/",
+    "https://www.theworldavatar.com/kg/",
+]
+
+
+def _iri_cell_ratio(item: Dict[str, Any]) -> float:
+    rows = _table_rows(item)
+    vars_ = item.get("vars") or item.get("columns") or []
+    if not rows or not vars_:
+        return 0.0
+    total = 0
+    iri_cells = 0
+    for row in rows:
+        for key in vars_:
+            val = str(row.get(key, ""))
+            if not val:
+                continue
+            total += 1
+            if any(val.startswith(prefix) for prefix in TWA_ABOX_IRI_PREFIXES):
+                iri_cells += 1
+    return iri_cells / total if total else 0.0
+
+
+def _table_signature(item: Dict[str, Any]) -> str:
+    rows = _table_rows(item)
+    vars_ = item.get("vars") or item.get("columns") or []
+    first = json.dumps(rows[0], sort_keys=True) if rows else ""
+    return f"{':'.join(vars_)}:{len(rows)}:{first}"
+
+
 def _evaluate_twa_payload(payload: Dict[str, Any], *, expect_data: bool) -> tuple[bool, str, int, int]:
     data = payload.get("data") or []
-    rows = sum(len(_table_rows(item)) for item in data)
+    rows = sum(len(_table_rows(item)) for item in data if item.get("type") == "table")
     steps = len((payload.get("metadata") or {}).get("steps") or [])
 
-    narrative = ""
-    for item in data:
-        bindings = _table_rows(item)
-        vars_ = item.get("vars") or item.get("columns") or []
-        if vars_ == ["answer"] and bindings:
-            narrative = str(bindings[0].get("answer", ""))
-            break
-        if bindings and len(vars_) == 1:
-            cell = str(bindings[0].get(vars_[0], ""))
-            if len(cell) > len(narrative):
-                narrative = cell
+    narrative = (payload.get("narrative") or "").strip()
+    if not narrative:
+        for item in data:
+            if item.get("type") != "table":
+                continue
+            bindings = _table_rows(item)
+            vars_ = item.get("vars") or item.get("columns") or []
+            if vars_ == ["answer"] and bindings:
+                narrative = str(bindings[0].get("answer", ""))
+                break
+            if vars_ == ["Summary"] and bindings:
+                narrative = str(bindings[0].get("Summary", ""))
+                break
+            if bindings and len(vars_) == 1:
+                cell = str(bindings[0].get(vars_[0], ""))
+                if len(cell) > len(narrative):
+                    narrative = cell
 
     weak = not narrative or len(narrative) < 15
     infra = "infrastructure" in narrative.lower() or "mcp_server" in narrative.lower()
 
+    table_items = [item for item in data if item.get("type") == "table"]
+    signatures = [_table_signature(item) for item in table_items]
+    if len(signatures) != len(set(signatures)):
+        return False, "duplicate table blocks in data[]", rows, steps
+
+    for item in table_items:
+        if _iri_cell_ratio(item) > 0.5:
+            return False, "table dominated by raw IRIs", rows, steps
+
     if infra:
         return False, "narrative describes infrastructure only", rows, steps
-    if rows > 0:
+    if rows > 0 or any(item.get("type") in {"map", "embed", "scatter_plot"} for item in data):
         preview = narrative[:160] if narrative else f"{rows} data row(s) in {len(data)} item(s)"
+        if narrative.startswith("{") and "}" in narrative[:80]:
+            return False, "narrative looks like raw JSON", rows, steps
         return True, preview, rows, steps
     if expect_data and rows == 0 and weak:
         return False, "no data rows and empty/weak answer", rows, steps

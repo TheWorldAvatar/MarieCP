@@ -9,8 +9,17 @@ export OPENAI_API_KEY="${OPENAI_API_KEY:-${REMOTE_API_KEY:-}}"
 if [[ "${DEMO_MIRROR_ON_START:-1}" == "1" ]]; then
   if [[ ! -f demos/static/zaha/index.html ]]; then
     echo "==> Mirroring Zaha static assets from theworldavatar.io"
-    python -m demos.mirror || echo "WARN: mirror failed; Zaha UI may be incomplete" >&2
+    python -m demos.mirror || echo "WARN: mirror failed; using committed zaha-classic" >&2
   fi
+  if [[ ! -f demos/static/zaha/index.html ]] && [[ -f demos/zaha-classic/index.html ]]; then
+    echo "==> Bootstrapping Zaha static from demos/zaha-classic"
+    mkdir -p demos/static/zaha
+    cp demos/zaha-classic/index.html demos/static/zaha/
+    if [[ -d demos/zaha-classic/static ]]; then
+      cp -a demos/zaha-classic/static demos/static/zaha/
+    fi
+  fi
+  python -m demos.patch_zaha_static || echo "WARN: Zaha static patch failed" >&2
 fi
 
 WORKERS="${MARIECP_WORKERS:-2}"

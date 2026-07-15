@@ -38,7 +38,10 @@ NAMESPACES: Dict[str, Dict[str, Any]] = {
         "ontology_prefix": "https://www.theworldavatar.com/kg/ontomops/",
         "tbox_files": ["ontomops/ontomops-ogm.ttl"],
         "description": "Metal-organic polyhedra, CBUs, assembly models (T-box; A-box on MOPs stack).",
-        "endpoint_note": "Blazegraph namespace empty; use twa-mops or mof-twa for instance data.",
+        "endpoint_note": (
+            "Chemistry Blazegraph ontomops namespace is empty. "
+            "MOP A-box: remote Blazegraph ontomops_ogm via twa-mops / chemistry-ontomops."
+        ),
     },
     "ontoprovenance": {
         "label": "OntoProvenance",

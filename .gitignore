@@ -63,6 +63,9 @@ demos/static/
 vendor/TheWorldAvatar/
 vendor/**/node_modules/
 .venv-wsl/
+# Hybrid RAG / Elisa clone (python -m demos.setup_rag_frontend)
+vendor/RAG/
+.venv-rag/
 
 # Archives (use extracted source in repo instead)
 *.rar

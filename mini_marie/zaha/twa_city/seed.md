@@ -1,11 +1,12 @@
 # TWA City stack — data source notes
 
-Credentials (both cities): `postgres` / `password`
+Credentials: Bremen/KL `postgres` / `password`; Pirmasens `postgres` / `postgis`
 
 ## Public endpoints (cmpg.io)
 
 | City | Adminer (PostGIS) | Ontop UI | SPARQL |
 |------|-------------------|----------|--------|
+| Pirmasens | [Adminer](https://pirmasens.cmpg.io/adminer/ui/?pgsql=pirmasens-postgis%3A5432&username=postgres) | [Ontop UI](https://pirmasens.cmpg.io/ontop/ui/) | `https://pirmasens.cmpg.io/ontop/sparql/` |
 | Kaiserslautern | [Adminer](https://kaiserslautern.cmpg.io/adminer/ui/?pgsql=kaiserslautern-postgis%3A5432) | [Ontop UI](https://kaiserslautern.cmpg.io/ontop/ui/) | `https://kaiserslautern.cmpg.io/ontop/sparql/` |
 | Bremen | [Adminer](https://bremen.cmpg.io/adminer/ui/?pgsql=bremen-stack-postgis%3A5432&username=postgres) | [Ontop UI](https://bremen.cmpg.io/ontop/ui/) | `https://bremen.cmpg.io/ontop/sparql/` |
 
@@ -13,8 +14,25 @@ Credentials (both cities): `postgres` / `password`
 
 | City | PostGIS host:port |
 |------|-------------------|
+| Pirmasens | `pirmasens-postgis:5432` |
 | Kaiserslautern | `kaiserslautern-postgis:5432` |
 | Bremen | `bremen-stack-postgis:5432` |
+
+## Schema (Pirmasens — richer UBEM layer)
+
+- **CityGML buildings:** `bldg:Building`, IRI `https://www.theworldavatar.com/kg/Building/{uuid}`
+- **DABGEO/OEMA buildings:** `oema:Building`, IRI `https://www.theworldavatar.com/kg/DABGEO/Building_{GebId}`
+- **UBEM devices (3 per DABGEO building):** RoofSolarCollectors, RoofThermalPlateCollectors, RoofThermalTubeCollectors
+- **Energy metrics:** `om:hasValue` → `om:hasNumericalValue` on AnnualHeatSupply, AnnualCO2Savings, Radabshz
+- **Geo:** 3D `POLYGON Z` via GeoSPARQL; map tool flattens to 2D
+- **Visualization:** [Map UI](https://pirmasens.cmpg.io/visualisation/de/map)
+
+Probe outputs: `probe_results_pirmasens.json`, `probe_results_pirmasens_followup.json`
+
+```bash
+python scripts/probe_pirmasens.py
+python -m mini_marie.zaha.twa_city.probe --endpoint https://pirmasens.cmpg.io/ontop/sparql/ --discover
+```
 
 ## Schema (from Kaiserslautern probe)
 

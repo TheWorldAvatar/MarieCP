@@ -1,0 +1,11 @@
+PREFIX bldg: <http://www.opengis.net/citygml/building/2.0/>
+PREFIX obe: <https://www.theworldavatar.com/kg/ontobuiltenv/>
+SELECT ?usage_type (COUNT(?b) AS ?count)
+WHERE {
+  ?b a bldg:Building ;
+     obe:hasPropertyUsage ?u .
+  ?u a ?usage_type .
+}
+GROUP BY ?usage_type
+ORDER BY DESC(?count)
+LIMIT 25

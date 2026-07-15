@@ -21,6 +21,7 @@ from mini_marie.cache_tiers import (
     make_cache_key,
     row_limit_for_tier,
 )
+from mini_marie.zaha.twa_city.limits import online_sparql_delay_seconds
 from mini_marie.zaha.twa_city.sparql_plans import (
     DEFAULT_ONLINE_LIMIT,
     SparqlPlan,
@@ -544,6 +545,7 @@ def invoke_plan(
         "endpoint": plan.endpoint,
     }
 
+    cache_miss = False
     if use_cache:
         cached = ck_store.get(tool, args, tier)
         if cached is not None:
@@ -554,6 +556,7 @@ def invoke_plan(
             if own_cache:
                 ck_store.close()
             return cached, meta, plan
+        cache_miss = True
 
     if not allow_remote or mode == "offline":
         if own_cache:
@@ -562,6 +565,11 @@ def invoke_plan(
             f"Missing full cache for tool={tool!r} args={_canonical_args(args)!r}. "
             f"Run: python -m mini_marie.zaha.twa_city.warm_city_cache --city {city!r}"
         )
+
+    if cache_miss and tier == TIER_PROBE:
+        delay = online_sparql_delay_seconds()
+        if delay > 0:
+            time.sleep(delay)
 
     started = time.perf_counter()
     rows = plan.execute()

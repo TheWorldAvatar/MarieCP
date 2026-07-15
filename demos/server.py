@@ -33,6 +33,7 @@ from flask import Flask, Response, jsonify, redirect, render_template, request, 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 STATIC_ROOT = Path(__file__).resolve().parent / "static"
 MARIE_CLASSIC_ROOT = Path(__file__).resolve().parent / "marie-classic"
+ZAHA_CLASSIC_ROOT = Path(__file__).resolve().parent / "zaha-classic"
 HUB_ROOT = Path(__file__).resolve().parent / "hub"
 
 if str(REPO_ROOT) not in sys.path:
@@ -111,9 +112,11 @@ def _marie_frontend_base() -> str:
     return marie_public_base().rstrip("/")
 
 
-def _elisa_frontend_url() -> str:
-    """External hybrid RAG UI (hosted QA deployment by default)."""
-    return os.environ.get("ELISA_FRONTEND_URL", "https://qa.theworldavatar.io").rstrip("/")
+def _elisa_frontend_base() -> str:
+    """Elisa UI — production QA host; override for local RAG (port 8000)."""
+    return os.environ.get(
+        "ELISA_FRONTEND_URL", "https://qa.theworldavatar.io"
+    ).rstrip("/")
 
 
 def _render_demo_hub():
@@ -121,7 +124,7 @@ def _render_demo_hub():
         "hub.html",
         marie_url="/demos/marie-classic/",
         zaha_url="/demos/zaha/",
-        elisa_url=f"{_elisa_frontend_url()}/",
+        elisa_url=f"{_elisa_frontend_base()}/",
     )
 
 
@@ -131,6 +134,16 @@ def _marie_classic_root() -> Path:
     if mirrored.is_dir() and (mirrored / "index.html").is_file():
         return mirrored
     return MARIE_CLASSIC_ROOT
+
+
+def _zaha_root() -> Path:
+    """Committed Zaha UI (``demos/zaha-classic/``), with optional mirrored override."""
+    mirrored = STATIC_ROOT / "zaha"
+    if mirrored.is_dir() and (mirrored / "index.html").is_file():
+        return mirrored
+    if ZAHA_CLASSIC_ROOT.is_dir() and (ZAHA_CLASSIC_ROOT / "index.html").is_file():
+        return ZAHA_CLASSIC_ROOT
+    return mirrored
 
 
 def _parse_body() -> dict:
@@ -405,6 +418,17 @@ def demo_hub_assets(subpath: str):
     return send_from_directory(HUB_ROOT, subpath)
 
 
+# --- Elisa (local RAG frontend redirect) ---
+
+
+@app.route("/demos/elisa/")
+@app.route("/demos/elisa/<path:subpath>")
+def elisa_frontend_redirect(subpath: str = ""):
+    base = _elisa_frontend_base()
+    target = f"{base}/{subpath}" if subpath else f"{base}/"
+    return redirect(target, code=302)
+
+
 # --- Marie UI (proxy to Next.js, or redirect when MARIE_FRONTEND_PROXY=0) ---
 
 
@@ -458,13 +482,20 @@ def marie_classic_static(subpath: str = ""):
 
 # --- static Zaha ---
 
+
+@app.route("/demos/zaha")
+def zaha_redirect():
+    """Canonical URL with trailing slash (relative ./static/ paths need it)."""
+    return redirect("/demos/zaha/", code=308)
+
+
 @app.route("/demos/zaha/")
 @app.route("/demos/zaha/<path:subpath>")
 def zaha_static(subpath: str = ""):
-    zaha_root = STATIC_ROOT / "zaha"
-    if not zaha_root.exists():
+    zaha_root = _zaha_root()
+    if not zaha_root.is_dir() or not (zaha_root / "index.html").is_file():
         return (
-            "Zaha static mirror missing. Run: python -m demos.mirror",
+            "Zaha static missing. Commit demos/zaha-classic/ or run: python -m demos.mirror",
             503,
         )
     if not subpath:
@@ -500,6 +531,7 @@ def main() -> None:
     if marie_proxy_enabled():
         print(f"  Marie upstream  {resolve_marie_upstream()}{marie_public_base()}/")
     print(f"  Zaha    http://{host}:{port}/demos/zaha/")
+    print(f"  Elisa   http://{host}:{port}/demos/elisa/  -> {_elisa_frontend_base()}/")
     print(f"  Marie API  http://{host}:{port}/demos/marie/api/")
     print(f"  Cache  {cache_root}")
     try:

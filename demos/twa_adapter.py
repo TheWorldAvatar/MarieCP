@@ -22,6 +22,7 @@ from demos.marie_format import (
     tables_from_tool_outputs,
     tables_from_zaha_items,
 )
+from demos.twa_format import kgqa_result_to_twa, kgqa_result_to_twa_display
 
 
 def load_offline_payload(path: str) -> Optional[Dict[str, Any]]:
@@ -43,11 +44,61 @@ def _table_rows(value: Any) -> List[Dict[str, Any]]:
     return []
 
 
-_PREFERRED_OFFLINE_VARS = (
+_EXTENDED_PREFERRED_OFFLINE_VARS = (
+    "top_ubem_rows",
     "top_building_rows",
     "buildings_with_wkt",
     "location_join_rows",
 )
+
+
+def _offline_answer_variable(payload: Dict[str, Any]) -> Optional[str]:
+    var = payload.get("answer_variable")
+    if var:
+        return str(var)
+    wf_def = payload.get("workflow_definition") or {}
+    var = wf_def.get("answer_variable")
+    if var:
+        return str(var)
+    return None
+
+
+def _rows_for_offline_variable(payload: Dict[str, Any], var_name: str) -> List[Dict[str, Any]]:
+    sidecar_vars = _sidecar_variable_paths(payload)
+    path = sidecar_vars.get(var_name)
+    if path:
+        rows = _rows_from_sidecar(path)
+        if rows:
+            return rows
+    variables = payload.get("variables") or {}
+    return _table_rows(variables.get(var_name))
+
+
+def _answer_rows_from_offline_payload(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Resolve authoritative table rows from offline replay metadata."""
+    answer_var = _offline_answer_variable(payload)
+    if answer_var:
+        rows = _rows_for_offline_variable(payload, answer_var)
+        if rows:
+            return rows
+
+    answer_rows = _table_rows(payload.get("answer"))
+    if answer_rows:
+        return answer_rows
+
+    sidecar_vars = _sidecar_variable_paths(payload)
+    for var in _EXTENDED_PREFERRED_OFFLINE_VARS:
+        path = sidecar_vars.get(var)
+        if path:
+            rows = _rows_from_sidecar(path)
+            if rows:
+                return rows
+    variables = payload.get("variables") or {}
+    for var in _EXTENDED_PREFERRED_OFFLINE_VARS:
+        rows = _table_rows(variables.get(var))
+        if rows:
+            return rows
+    return []
 
 
 def _sidecar_variable_paths(payload: Dict[str, Any]) -> Dict[str, str]:
@@ -77,15 +128,25 @@ def _rows_from_sidecar(path: str, *, limit: int = 500) -> List[Dict[str, Any]]:
 def _preferred_offline_table(payload: Dict[str, Any]) -> Optional[Tuple[str, List[Dict[str, Any]]]]:
     from mini_marie.row_annotations import stamp_offline_table_rows
 
+    answer_var = _offline_answer_variable(payload)
+    if answer_var:
+        rows = _rows_for_offline_variable(payload, answer_var)
+        if rows:
+            return answer_var, stamp_offline_table_rows(rows, payload)
+
+    answer_rows = _table_rows(payload.get("answer"))
+    if answer_rows:
+        return "answer", stamp_offline_table_rows(answer_rows, payload)
+
     sidecar_vars = _sidecar_variable_paths(payload)
-    for var in _PREFERRED_OFFLINE_VARS:
+    for var in _EXTENDED_PREFERRED_OFFLINE_VARS:
         path = sidecar_vars.get(var)
         if path:
             rows = _rows_from_sidecar(path)
             if rows:
                 return var, stamp_offline_table_rows(rows, payload)
     variables = payload.get("variables") or {}
-    for var in _PREFERRED_OFFLINE_VARS:
+    for var in _EXTENDED_PREFERRED_OFFLINE_VARS:
         var_rows = _table_rows(variables.get(var))
         if var_rows:
             return var, stamp_offline_table_rows(var_rows, payload)
@@ -306,19 +367,67 @@ def route_for_qa_domain(question: str, qa_domain: Optional[str]) -> RouteResult:
 
 
 def _wkt_from_row(row: Dict[str, Any]) -> Optional[str]:
+    from demos.twa_format import _normalize_wkt
+
     for key, val in row.items():
         if not isinstance(val, str):
             continue
         lk = key.lower()
         if "wkt" in lk or lk in {"geometry", "geom", "footprint"}:
-            if val.upper().startswith(("POINT", "POLYGON", "LINESTRING", "MULTI")):
-                return val
-        if val.upper().startswith(("POINT(", "POLYGON(", "LINESTRING(", "MULTIPOLYGON(")):
-            return val
+            normalized = _normalize_wkt(val)
+            if normalized:
+                return normalized
     return None
 
 
-def _rows_to_table(name: str, rows: List[Dict[str, Any]], *, limit: int = 500) -> List[Dict[str, Any]]:
+def _collect_row_wkts(rows: List[Dict[str, Any]], *, limit: int = 50) -> List[str]:
+    wkts: List[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        wkt = _wkt_from_row(row)
+        if not wkt or wkt in seen:
+            continue
+        seen.add(wkt)
+        wkts.append(wkt)
+        if len(wkts) >= limit:
+            break
+    return wkts
+
+
+def _infer_city_for_map(name: str, rows: List[Dict[str, Any]]) -> str:
+    for row in rows[:20]:
+        city = row.get("city")
+        if isinstance(city, str) and city.strip():
+            return city.strip().lower()
+    text = (name or "").lower()
+    for city in ("pirmasens", "bremen", "kaiserslautern"):
+        if city in text:
+            return city
+    return ""
+
+
+def _map_items_from_rows(name: str, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    from mini_marie.zaha.twa_city.gis_visualization import recenter_wkts_to_city
+
+    wkts = _collect_row_wkts(rows)
+    if not wkts:
+        return []
+    city = _infer_city_for_map(name, rows)
+    if city:
+        wkts = recenter_wkts_to_city(wkts, city)
+    item: Dict[str, Any] = {"type": "map", "title": name, "wkt_crs84": wkts[0]}
+    if len(wkts) > 1:
+        item["wkt_list"] = wkts
+    return [item]
+
+
+def _rows_to_table(
+    name: str,
+    rows: List[Dict[str, Any]],
+    *,
+    limit: int = 500,
+    include_map: bool = True,
+) -> List[Dict[str, Any]]:
     if not rows:
         return []
     trimmed = rows[:limit]
@@ -326,10 +435,29 @@ def _rows_to_table(name: str, rows: List[Dict[str, Any]], *, limit: int = 500) -
     items: List[Dict[str, Any]] = [
         {"type": "table", "vars": vars_, "bindings": trimmed},
     ]
-    wkt = _wkt_from_row(trimmed[0])
-    if wkt:
-        items.append({"type": "map", "title": name, "wkt_crs84": wkt})
+    if include_map:
+        items.extend(_map_items_from_rows(name, trimmed))
     return items
+
+
+def _wkt_rows_from_offline_payload(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    sidecar_vars = _sidecar_variable_paths(payload)
+    for var in ("buildings_with_wkt", "location_join_rows"):
+        path = sidecar_vars.get(var)
+        if path:
+            rows = _rows_from_sidecar(path)
+            if rows:
+                return rows
+    variables = payload.get("variables") or {}
+    for var in ("buildings_with_wkt", "location_join_rows"):
+        rows = _table_rows(variables.get(var))
+        if rows:
+            return rows
+    return []
+
+
+def _table_rows_from_offline_payload(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return _answer_rows_from_offline_payload(payload)
 
 
 def _offline_payload_label(payload: Dict[str, Any]) -> str:
@@ -351,11 +479,25 @@ def _data_from_offline(offline_path: Optional[str]) -> List[Dict[str, Any]]:
     if not payload:
         return []
     label = _offline_payload_label(payload)
+    data: List[Dict[str, Any]] = []
+
+    table_rows = _table_rows_from_offline_payload(payload)
+    if table_rows:
+        data.extend(_rows_to_table(label, table_rows, include_map=False))
+
+    wkt_rows = _wkt_rows_from_offline_payload(payload)
+    if wkt_rows:
+        data.extend(_map_items_from_rows(label, wkt_rows))
+    elif table_rows:
+        data.extend(_map_items_from_rows(label, table_rows))
+
+    if data:
+        return data
+
     preferred = _preferred_offline_table(payload)
     if preferred:
         _name, rows = preferred
         return _rows_to_table(label, rows)
-    data: List[Dict[str, Any]] = []
     for name, rows in collect_row_tables(payload):
         data.extend(_rows_to_table(name, rows))
     return data
@@ -540,8 +682,13 @@ def _summarize_sg_tool_rows(rows: List[Dict[str, Any]], question: str) -> str:
             f"**{row.get('area_sqm')}** sqm plot area"
             + (f" (max GFA **{row['max_gfa']}** sqm)." if row.get("max_gfa") else ".")
         )
-    preview = ", ".join(f"{k}: {v}" for k, v in row.items() if v)[:400]
-    return preview or f"Tool returned: {row}"
+    from demos.twa_format import _summarize_metric_row
+
+    metric = _summarize_metric_row(row, question)
+    if metric:
+        return metric
+    preview = "; ".join(f"{k.replace('_', ' ')} {v}" for k, v in row.items() if v)[:400]
+    return preview or "Tool returned a result row."
 
 
 def _sg_tool_for_entry(entry: Any) -> Tuple[Optional[str], Optional[Any]]:
@@ -762,6 +909,156 @@ def _try_direct_mof_competency_workflow(
     return None
 
 
+def _summarize_city_workflow_rows(rows: List[Dict[str, Any]], *, city: str) -> str:
+    if not rows:
+        return f"No building results returned for {city}."
+    lines = [f"Found **{len(rows)}** result rows for **{city}**."]
+    for row in rows[:8]:
+        label = (
+            row.get("dab_building")
+            or row.get("building")
+            or row.get("label")
+            or row.get("uuid")
+            or ""
+        )
+        if isinstance(label, str) and label.startswith("http"):
+            label = label.rsplit("/", 1)[-1]
+        if row.get("heat_kwh_per_m2") is not None:
+            lines.append(f"- {label}: {row.get('heat_kwh_per_m2')} kWh/m² heat supply")
+        elif row.get("co2_savings") is not None:
+            lines.append(f"- {label}: {row.get('co2_savings')} CO2 savings")
+        else:
+            height = row.get("height") or row.get("height_m") or "?"
+            usage = row.get("usage_type") or row.get("usage") or ""
+            usage_short = usage.rsplit("/", 1)[-1] if isinstance(usage, str) and "/" in usage else usage
+            extra = f", usage {usage_short}" if usage_short else ""
+            lines.append(f"- {label}: {height} m{extra}")
+    if len(rows) > 8:
+        lines.append(f"- … and {len(rows) - 8} more")
+    if any(_wkt_from_row(row) for row in rows):
+        lines.append("Building footprints are shown on the map below.")
+    return "\n".join(lines)
+
+
+def _run_direct_city_workflow(
+    question: str,
+    route: RouteResult,
+    *,
+    workflow_name: str,
+    parameters: Dict[str, Any],
+    catalog_entry_id: Optional[str] = None,
+    reason: str,
+) -> Dict[str, Any]:
+    from mini_marie.kgqa.recording_utils import extract_from_text
+    from mini_marie.zaha.twa_city.workflow_mcp import run_workflow_online
+
+    city = str(parameters.get("city") or "")
+    t0 = time.perf_counter()
+    tool_content = run_workflow_online(
+        workflow_name,
+        online_limit=10,
+        question=question,
+        parameters_json=json.dumps(parameters),
+    )
+    online_ms = round((time.perf_counter() - t0) * 1000)
+    rec = extract_from_text(tool_content)
+    recording_path = rec.get("recording_path")
+
+    t_off = time.perf_counter()
+    offline_result = _replay_offline_if_enabled(
+        recording_path,
+        workflow_id=workflow_name,
+    )
+    offline_ms = round((time.perf_counter() - t_off) * 1000) if offline_result else 0
+
+    display_rows: List[Dict[str, Any]] = []
+    offline_path = (offline_result or {}).get("offline_path")
+    if offline_path:
+        payload = load_offline_payload(offline_path)
+        if payload:
+            display_rows = (
+                _answer_rows_from_offline_payload(payload)
+                or _wkt_rows_from_offline_payload(payload)
+            )
+
+    online_answer = _summarize_city_workflow_rows(display_rows, city=city or "city")
+    if not display_rows:
+        online_answer = (
+            f"Ran `{workflow_name}` for {city or 'city'}. "
+            "Results will appear in the table once offline replay completes."
+        )
+
+    metadata: Dict[str, Any] = {
+        "tool_activity": {
+            "tool_outputs": [{"name": "run_workflow_online", "content": tool_content}],
+            "executed_tool_names": ["run_workflow_online"],
+        },
+        "workflow_id": workflow_name,
+        "catalog_entry_id": catalog_entry_id,
+        "workflow_parameters": parameters,
+    }
+
+    return {
+        "question": question,
+        "online_answer": online_answer,
+        "metadata": metadata,
+        "route": {
+            "mcp_servers": route.mcp_servers,
+            "domain": route.domain,
+            "domains": route.domains,
+            "reason": reason,
+            "catalog_entry": route.catalog_entry,
+        },
+        "offline": offline_result,
+        "offline_recording_path": offline_path,
+        "recording_path": recording_path,
+        "workflow_id": workflow_name,
+        "timing": {"online_ms": online_ms, "offline_ms": offline_ms},
+    }
+
+
+def _try_direct_city_workflow(
+    question: str,
+    route: RouteResult,
+) -> Optional[Dict[str, Any]]:
+    """Run catalogued German city workflows without the ReAct loop."""
+    if "twa-city" not in route.mcp_servers and route.domain != "city":
+        return None
+
+    from demos.german_city_specs import (
+        is_workflow_spec,
+        lookup_german_city_question,
+        resolve_city_workflow_parameters,
+    )
+
+    spec = lookup_german_city_question(question)
+    if spec and is_workflow_spec(spec):
+        workflow_name = str(spec.get("workflow") or "city_ranked_buildings")
+        parameters = resolve_city_workflow_parameters(question, workflow_name, spec=spec)
+        return _run_direct_city_workflow(
+            question,
+            route,
+            workflow_name=workflow_name,
+            parameters=parameters,
+            catalog_entry_id=str(spec.get("id") or ""),
+            reason=f"direct city workflow {workflow_name} ({spec.get('id')})",
+        )
+
+    for entry in _catalog_entries_from_route(route):
+        if entry.domain != "city" or not entry.workflow_id:
+            continue
+        workflow_name = str(entry.workflow_id)
+        parameters = resolve_city_workflow_parameters(question, workflow_name)
+        return _run_direct_city_workflow(
+            question,
+            route,
+            workflow_name=workflow_name,
+            parameters=parameters,
+            catalog_entry_id=entry.id,
+            reason=f"direct city workflow {workflow_name} ({entry.id})",
+        )
+    return None
+
 
 def _try_direct_cross_domain(
     question: str,
@@ -839,10 +1136,65 @@ def _try_direct_cross_domain(
     }
 
 
+def _try_direct_mop_competency(
+    question: str,
+    route: RouteResult,
+) -> Optional[Dict[str, Any]]:
+    """Run catalogued MOP Blazegraph competency tools without the ReAct loop."""
+    from demos.mop_specs import lookup_mop_question, run_mop_competency_tool
+    from demos.marie_format import parse_tabular_content
+
+    spec = lookup_mop_question(question)
+    if not spec:
+        return None
+
+    t0 = time.perf_counter()
+    tool_content = run_mop_competency_tool(spec)
+    online_ms = round((time.perf_counter() - t0) * 1000)
+    online_answer = _summarize_competency_tool_output(tool_content, question)
+
+    tool_outputs: List[Dict[str, str]] = [{"name": spec.get("tool", "mop_remote"), "content": tool_content}]
+    parsed = parse_tabular_content(tool_content)
+    if parsed:
+        cols, rows = parsed
+        if rows and not online_answer.strip():
+            online_answer = _summarize_competency_tool_output(
+                "\t".join(cols) + "\n" + "\n".join("\t".join(str(r.get(c, "")) for c in cols) for r in rows[:10]),
+                question,
+            )
+
+    return {
+        "question": question,
+        "online_answer": online_answer,
+        "metadata": {
+            "tool_activity": {
+                "tool_outputs": tool_outputs,
+                "executed_tool_names": [spec.get("tool", "mop_remote")],
+            },
+            "catalog_entry_id": spec.get("id"),
+            "competency_envelope": tool_content,
+        },
+        "route": {
+            "mcp_servers": route.mcp_servers,
+            "domain": "mops",
+            "domains": route.domains or ["mops"],
+            "reason": f"direct MOP Blazegraph tool {spec.get('tool')} ({spec.get('id')})",
+            "catalog_entry": None,
+        },
+        "timing": {"online_ms": online_ms, "offline_ms": 0},
+    }
+
+
 def _try_direct_from_route(question: str, route: RouteResult) -> Optional[Dict[str, Any]]:
     cross = _try_direct_cross_domain(question, route)
     if cross:
         return cross
+    city = _try_direct_city_workflow(question, route)
+    if city:
+        return city
+    mop = _try_direct_mop_competency(question, route)
+    if mop:
+        return mop
     mof = _try_direct_mof_competency_workflow(question, route)
     if mof:
         return mof
@@ -907,28 +1259,6 @@ def _resolve_offline_recording_paths(kgqa: Dict[str, Any]) -> List[str]:
             _add(path)
         _add(replay.get("offline_path"))
     return paths
-
-
-def kgqa_result_to_twa(kgqa: Dict[str, Any]) -> Dict[str, Any]:
-    """Convert orchestrator output to {metadata, data} for POST /qa/."""
-    timing = kgqa.get("timing") or {}
-    metadata = kgqa.get("metadata") or {}
-    online_ms = int(timing.get("online_ms") or timing.get("total_ms") or 0)
-
-    offline_paths = _resolve_offline_recording_paths(kgqa)
-    data = _data_from_offline_paths(offline_paths)
-    if not data:
-        answer = kgqa.get("online_answer") or ""
-        if isinstance(answer, list) and answer and isinstance(answer[0], dict):
-            data = _rows_to_table("answer", answer)
-        else:
-            text = answer if isinstance(answer, str) else json.dumps(answer, ensure_ascii=False)
-            data = [{"type": "table", "vars": ["answer"], "bindings": [{"answer": text}]}]
-
-    return {
-        "metadata": {"steps": _steps_from_metadata(kgqa.get("question") or "", metadata, online_ms)},
-        "data": data,
-    }
 
 
 def kgqa_result_to_marie(kgqa: Dict[str, Any]) -> Dict[str, Any]:
@@ -1126,7 +1456,7 @@ async def run_twa_qa(
         model_name=model_name,
         recursion_limit=recursion_limit,
     )
-    return kgqa_result_to_twa(kgqa)
+    return await kgqa_result_to_twa_display(kgqa)
 
 
 async def run_marie_qa(
@@ -1165,14 +1495,35 @@ def stream_marie_chat_events(qa_request_id: str) -> Generator[str, None, None]:
     yield from stream_chat_events(question, data_items, narrative=narrative)
 
 
-def _extract_table_snippet(item: Dict[str, Any]) -> str:
+def _extract_table_snippet(item: Dict[str, Any], question: str = "") -> str:
+    """Natural-language snippet from a table — never dump raw JSON into chat."""
+    from demos.twa_format import _looks_like_raw_json, _narrative_from_data, _summarize_metric_row
+
     rows = item.get("data") or item.get("bindings") or []
     if not rows:
         return ""
     vars_ = item.get("vars") or item.get("columns") or []
     if vars_ == ["answer"] and len(rows) == 1:
-        return str(rows[0].get("answer", "")).strip()
-    return json.dumps(rows[0], ensure_ascii=False)[:500]
+        answer = str(rows[0].get("answer", "")).strip()
+        if answer and not _looks_like_raw_json(answer):
+            return answer
+    row0 = rows[0] if isinstance(rows[0], dict) else None
+    if row0:
+        metric = _summarize_metric_row(row0, question)
+        if metric:
+            return metric
+    nl = _narrative_from_data(question, [item])
+    if nl:
+        return nl
+    # Last resort: readable key/value prose, still not JSON braces.
+    if row0:
+        bits = [
+            f"{k.replace('_', ' ')} {v}"
+            for k, v in row0.items()
+            if v not in (None, "") and "wkt" not in str(k).lower()
+        ]
+        return "Result: " + "; ".join(bits[:8]) + "." if bits else ""
+    return ""
 
 
 def stream_chat_events(
@@ -1182,28 +1533,36 @@ def stream_chat_events(
     narrative: Optional[str] = None,
 ) -> Generator[str, None, None]:
     """SSE stream matching Zaha/Marie ./chat contract."""
+    from demos.twa_format import _looks_like_raw_json, _narrative_from_data
+
     text = (narrative or "").strip()
+    # Reject raw JSON / dict dumps that sometimes leak from the agent path.
+    if text and _looks_like_raw_json(text):
+        text = ""
     if not text:
-        snippets: List[str] = []
-        for item in data_items:
-            if item.get("type") == "table":
-                snippet = _extract_table_snippet(item)
-                if snippet:
-                    snippets.append(snippet)
-            elif item.get("type") == "map":
-                snippets.append(f"Map: {item.get('title') or 'geometry'}")
-        text = (
-            "\n\n".join(snippets)
-            if snippets
-            else "No tabular results were returned."
-        )
+        nl = _narrative_from_data(question, data_items)
+        if nl:
+            text = nl
+        else:
+            snippets: List[str] = []
+            for item in data_items:
+                if item.get("type") == "table":
+                    snippet = _extract_table_snippet(item, question)
+                    if snippet:
+                        snippets.append(snippet)
+                elif item.get("type") == "map":
+                    snippets.append(f"Map: {item.get('title') or 'geometry'}")
+            text = (
+                "\n\n".join(snippets)
+                if snippets
+                else "No tabular results were returned."
+            )
 
     started = time.perf_counter()
     # First chunk empty-ish then word stream (matches frontend trimStart behavior)
     for idx, token in enumerate(_tokenize_stream(text)):
         latency = round((time.perf_counter() - started) * 1000)
-        prefix = " " if idx else ""
-        payload = {"content": prefix + token, "latency": latency}
+        payload = {"content": token, "latency": latency}
         yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
