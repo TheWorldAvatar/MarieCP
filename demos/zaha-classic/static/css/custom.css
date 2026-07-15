@@ -99,7 +99,7 @@ body.header-fixed.header-animated #header.scrolled .logo img, body.header-fixed.
 	font-size: 10pt;
 }
 .intro-container img {
-	width: 250px;
+	width: 175px;
 	height: 250px;
     box-shadow: 0 4px 8px 0 rgb(0 0 0 / 30%), 0 6px 20px 0 rgb(0 0 0 / 10%);
 }
@@ -107,16 +107,61 @@ body.header-fixed.header-animated #header.scrolled .logo img, body.header-fixed.
 	box-shadow: 0 4px 8px 0 rgb(0 0 0 / 60%), 0 6px 20px 0 rgb(0 0 0 / 40%);
 }
 
+/* Portrait hover bio (Marie/Zaha sub-pages; hub uses .hub-portrait in hub.css). */
+.assistant-portrait {
+	position: relative;
+	width: 175px;
+	height: 250px;
+	margin: 0;
+}
+
+.assistant-portrait img {
+	width: 175px;
+	height: 250px;
+	object-fit: cover;
+	box-shadow: none;
+}
+
+.assistant-portrait img:hover {
+	box-shadow: none;
+}
+
+.assistant-portrait::after {
+	content: attr(data-bio);
+	position: absolute;
+	left: 50%;
+	bottom: 0.75rem;
+	z-index: 2;
+	width: 15rem;
+	max-width: calc(100vw - 2rem);
+	padding: 0.75rem 0.85rem;
+	border-radius: 0.35rem;
+	background: rgba(18, 31, 48, 0.92);
+	color: #fff;
+	font-size: 0.82rem;
+	line-height: 1.35;
+	opacity: 0;
+	pointer-events: none;
+	transform: translate(-50%, 0.35rem);
+	transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.assistant-portrait:hover::after,
+.assistant-portrait:focus-within::after {
+	opacity: 1;
+	transform: translate(-50%, 0);
+}
+
 /* Left element of introduction content (image) */
 .intro-left {
-	min-width: 300px;
-	max-width: 300px;
+	min-width: 175px;
+	max-width: 175px;
 	float: left;
 	margin-right: 30px;
 		
 	display: flex;
 	justify-content: center;
-	align-items: center;
+	align-items: flex-start;
 }
 
 /* Center element of introduction content (text) */

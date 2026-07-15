@@ -17,7 +17,7 @@ GERMAN_SECTION = """
     <!-- german-city-competency -->
     <button type="submit" class="accordion">German cities (TWA buildings)</button>
     <div class="accordion-panel">
-        <p>Validated competency questions for German Ontop city stacks (Bremen, Kaiserslautern, Pirmasens buildings, toilets, plots, solarthermie). Select a dataset, then click a question.</p>
+        <p>Validated competency questions for German Ontop city stacks (Bremen, Kaiserslautern, Pirmasens). Select a city, then click a question.</p>
         <div id="german-city-container" style="margin-bottom: 1rem;">
             <label for="german-city-select" style="margin-right: 0.5rem;">City:</label>
             <select id="german-city-select" style="min-width: 14rem; padding: 0.25rem 0.5rem;">

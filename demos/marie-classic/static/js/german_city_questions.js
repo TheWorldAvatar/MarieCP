@@ -8,7 +8,19 @@
     const CITY_ORDER = ["pirmasens", "bremen", "kaiserslautern"];
 
     function orderedCityKeys(catalog) {
-        return CITY_ORDER.filter((key) => Object.prototype.hasOwnProperty.call(catalog, key));
+        const seen = new Set();
+        return CITY_ORDER.filter((key) => {
+            if (!Object.prototype.hasOwnProperty.call(catalog, key)) {
+                return false;
+            }
+            const label = (catalog[key] && catalog[key].label) || key;
+            const cityName = label.split(" — ")[0].trim().toLowerCase();
+            if (seen.has(cityName)) {
+                return false;
+            }
+            seen.add(cityName);
+            return true;
+        });
     }
 
     function hasMap(spec) {

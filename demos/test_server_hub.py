@@ -30,6 +30,7 @@ def test_hub_routes():
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert "Marie" in body and "Zaha" in body and "Elisa" in body
+    assert "The World Avatar output agents" in body
     assert "/demos/hub/portraits/elisa.png" in body
     assert 'href="https://qa.theworldavatar.io/"' in body
     assert "advanced UI" not in body
