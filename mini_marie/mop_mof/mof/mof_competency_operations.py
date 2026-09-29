@@ -22,6 +22,8 @@ COMPETENCY_RESULT_LIMIT = 10
 COMPETENCY_COUNT_LIMIT = 1
 DEFAULT_ONLINE_PROBE_LIMIT = 10
 DEFAULT_OFFLINE_CAP = 500_000
+SYNTHESIS_SOURCEDBS = ("Park_Syn", "SynMOF")
+WS24_SOURCEDB = "WS24 Kulik Group"
 
 
 def _limit_suffix(limit: Optional[int] = None) -> str:
@@ -72,6 +74,26 @@ WHERE {{
   FILTER({nf})
   FILTER(?pld_val > 0)
 }}
+"""
+    return execute_sparql(query)
+
+
+def get_pld_breakdown_by_mof_name(mof_name: str) -> List[Dict[str, Any]]:
+    """Per-source PLD values for a named MOF (Q1 source attribution)."""
+    nf = _name_filter_exact(mof_name)
+    query = f"""
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+PREFIX mofs: <{MOFS_PREFIX}>
+SELECT ?sourcedb ?pld ?refcode
+WHERE {{
+  ?mof mofs:hasNames ?name ;
+       mofs:hasPLD ?pld ;
+       mofs:hasSourcedb ?sourcedb .
+  OPTIONAL {{ ?mof mofs:hasCsdRefcode ?refcode }}
+  FILTER({nf})
+  FILTER(xsd:float(?pld) > 0)
+}}
+ORDER BY ?sourcedb ?refcode
 """
     return execute_sparql(query)
 
@@ -133,18 +155,28 @@ def get_synthesis_by_mof_name(
     mof_name: str,
     name_mode: str = "contains",
     *,
+    synthesis_only: bool = True,
     limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """Synthesis routes (method, solvent, temperature, yield, DOI) for a named MOF (Q4)."""
     nf = _name_filter_contains(mof_name) if name_mode == "contains" else _name_filter_exact(mof_name)
+    source_filter = ""
+    synthesis_field_filter = ""
+    if synthesis_only:
+        dbs = ", ".join(f'"{db}"' for db in SYNTHESIS_SOURCEDBS)
+        source_filter = f"FILTER (?sourcedb IN ({dbs}))"
+        synthesis_field_filter = """
+  FILTER(
+    BOUND(?method) || BOUND(?solvent) || BOUND(?temp) || BOUND(?yield)
+  )"""
     query = f"""
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 PREFIX mofs: <{MOFS_PREFIX}>
 SELECT ?name ?sourcedb ?refcode ?method ?solvent ?temp ?temp_unit ?time_val ?yield ?doi
 WHERE {{
   ?MOF a mofs:MetalOrganicFramework ;
+       mofs:hasSourcedb ?sourcedb ;
        mofs:hasNames ?name .
-  OPTIONAL {{ ?MOF mofs:hasSourcedb ?sourcedb }}
   OPTIONAL {{ ?MOF mofs:hasCsdRefcode ?refcode }}
   OPTIONAL {{ ?MOF mofs:hasMethod ?method }}
   OPTIONAL {{ ?MOF mofs:hasSolvents ?solvent }}
@@ -153,7 +185,10 @@ WHERE {{
   OPTIONAL {{ ?MOF mofs:hasReferenceDOI ?doi }}
   OPTIONAL {{ ?MOF mofs:hasTemperature ?temp ; mofs:hasTemperatureUnit ?temp_unit }}
   FILTER({nf})
+  {source_filter}
+  {synthesis_field_filter}
 }}
+ORDER BY DESC(?yield)
 {_limit_suffix(limit)}
 """
     return execute_sparql(query)
@@ -479,8 +514,23 @@ ORDER BY DESC(?water_pred)
     return execute_sparql(query, timeout=120)
 
 
+def count_thermal_stable_mofs(min_thermal: float = 300) -> List[Dict[str, Any]]:
+    """Count MOFs with experimental thermal stability above threshold."""
+    query = f"""
+PREFIX mofs: <{MOFS_PREFIX}>
+SELECT (COUNT(DISTINCT ?mof) AS ?count)
+WHERE {{
+  ?mof a mofs:MetalOrganicFramework ;
+       mofs:hasExperimentalThermalStability ?thermal ;
+       mofs:hasSourcedb ?sourcedb .
+  FILTER(?thermal > {float(min_thermal)})
+}}
+"""
+    return execute_sparql(query, timeout=120)
+
+
 def get_thermal_stable_mofs(
-    min_thermal: float = 400,
+    min_thermal: float = 300,
     limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """Experimental thermal stability above threshold (David Q6)."""
@@ -499,6 +549,55 @@ ORDER BY DESC(?thermal)
 {_limit_suffix(limit)}
 """
     return execute_sparql(query, timeout=120)
+
+
+def get_ws24_stability_by_refcode(
+    refcode: str,
+    *,
+    limit: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    """WS24 Burtch label and acid/base stability for a CSD refcode."""
+    rc = _escape_literal(refcode.strip().upper())
+    query = f"""
+PREFIX mofs: <{MOFS_PREFIX}>
+SELECT ?refcode ?burtch ?acid ?base ?exposure_time ?method
+WHERE {{
+  ?mof mofs:hasCsdRefcode ?refcode ;
+       mofs:hasSourcedb "{WS24_SOURCEDB}" ;
+       mofs:hasBurtchLabel ?burtch .
+  OPTIONAL {{ ?mof mofs:hasExperimentalAcidStability ?acid }}
+  OPTIONAL {{ ?mof mofs:hasExperimentalBaseStability ?base }}
+  OPTIONAL {{ ?mof mofs:hasExposureTime ?exposure_time }}
+  OPTIONAL {{ ?mof mofs:hasExperimentalStabilityMethod ?method }}
+  FILTER(?refcode = "{rc}")
+}}
+{_limit_suffix(limit)}
+"""
+    return execute_sparql(query, timeout=60)
+
+
+def get_pore_properties_by_mofid(
+    mofid: str,
+    *,
+    limit: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    """PLD, LFPD, GSA, GPV for all KG records sharing a MOFid."""
+    mid = _escape_literal(mofid.strip())
+    query = f"""
+PREFIX mofs: <{MOFS_PREFIX}>
+SELECT ?sourcedb ?pld ?lfpd ?gsa ?gpv
+WHERE {{
+  ?mof mofs:hasMofidV1 ?mofid ;
+       mofs:hasSourcedb ?sourcedb .
+  OPTIONAL {{ ?mof mofs:hasPLD ?pld }}
+  OPTIONAL {{ ?mof mofs:hasLFPD ?lfpd }}
+  OPTIONAL {{ ?mof mofs:hasGSA ?gsa }}
+  OPTIONAL {{ ?mof mofs:hasGPV ?gpv }}
+  FILTER(STR(?mofid) = "{mid}")
+}}
+{_limit_suffix(limit)}
+"""
+    return execute_sparql(query, timeout=60)
 
 
 def get_aqueous_low_temp_syntheses(limit: Optional[int] = None) -> List[Dict[str, Any]]:

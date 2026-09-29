@@ -478,7 +478,10 @@ def build_twa_data(kgqa: Dict[str, Any]) -> List[Dict[str, Any]]:
                 _attach_viz_items(label, raw_rows, question=question, tool_outputs=tool_outputs)
             )
 
-    return _dedupe_data_items(data)
+    from demos.table_presentation import enrich_data_items
+
+    data = enrich_data_items(_dedupe_data_items(data), question=question)
+    return data
 
 
 def _marie_data_from_twa(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -571,11 +574,17 @@ def _summarize_metric_row(row: Dict[str, Any], question: str = "") -> Optional[s
             f"(average **{_human_number(row['avg_height'])}** m)."
         )
 
+    from demos.kg_row_narrative import summarize_metric_row as _kg_summarize_row
+
+    kg_text = _kg_summarize_row(row, question)
+    if kg_text:
+        return kg_text
+
     # Generic compact scalar row (avoid dumping JSON braces).
     if len(row) <= 6 and all(not isinstance(v, (dict, list)) for v in row.values()):
         parts = [f"**{_human_number(v)}** {k.replace('_', ' ')}" for k, v in row.items() if v not in (None, "")]
         if parts:
-            return "Summary: " + "; ".join(parts) + "."
+            return "Result: " + "; ".join(parts) + "."
     return None
 
 
@@ -590,6 +599,12 @@ def _first_table_rows(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def _narrative_from_data(question: str, data: List[Dict[str, Any]]) -> Optional[str]:
+    from demos.kg_row_narrative import summarize_from_data
+
+    structured = summarize_from_data(question, data)
+    if structured:
+        return structured
+
     rows = _first_table_rows(data)
     if not rows:
         return None
@@ -616,12 +631,14 @@ def build_twa_narrative_rule(
 
     metadata = kgqa.get("metadata") or {}
     tool_outputs = (metadata.get("tool_activity") or {}).get("tool_outputs") or []
+    from demos.kg_row_narrative import is_weak_tool_summary, summarize_from_data
+
     online_answer = _display_answer(kgqa) or kgqa.get("online_answer")
 
-    from_data = _narrative_from_data(question, data)
+    from_data = summarize_from_data(question, data) or _narrative_from_data(question, data)
     if from_data:
         # Prefer structured NL when the agent answer is raw JSON / a dict dump.
-        if _looks_like_raw_json(online_answer) or not (
+        if _looks_like_raw_json(online_answer) or is_weak_tool_summary(online_answer) or not (
             isinstance(online_answer, str) and not _is_weak_answer(online_answer)
         ):
             return from_data

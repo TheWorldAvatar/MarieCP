@@ -76,6 +76,9 @@ def _rows_for_offline_variable(payload: Dict[str, Any], var_name: str) -> List[D
 
 def _answer_rows_from_offline_payload(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Resolve authoritative table rows from offline replay metadata."""
+    from demos.kg_row_narrative import pick_best_call_trace_rows
+
+    question = str(payload.get("question") or "")
     answer_var = _offline_answer_variable(payload)
     if answer_var:
         rows = _rows_for_offline_variable(payload, answer_var)
@@ -83,6 +86,13 @@ def _answer_rows_from_offline_payload(payload: Dict[str, Any]) -> List[Dict[str,
             return rows
 
     answer_rows = _table_rows(payload.get("answer"))
+    if answer_rows and not all(isinstance(r, dict) and "count" in r and len(r) <= 2 for r in answer_rows):
+        return answer_rows
+
+    best_trace = pick_best_call_trace_rows(payload, question)
+    if best_trace:
+        return best_trace
+
     if answer_rows:
         return answer_rows
 
@@ -271,6 +281,8 @@ def _is_blank_answer_value(answer: Any) -> bool:
 
 def _display_answer(kgqa: Dict[str, Any]) -> Any:
     """Prefer offline replay answer for UI when available."""
+    from demos.kg_row_narrative import is_weak_tool_summary
+
     offline = kgqa.get("offline") or {}
     if offline.get("status") == "error" and not offline.get("skipped"):
         err = offline.get("error")
@@ -280,7 +292,10 @@ def _display_answer(kgqa: Dict[str, Any]) -> Any:
     if not _is_blank_answer_value(answer):
         if isinstance(answer, list) and len(answer) > 1:
             return "\n\n".join(str(a) for a in answer if a)
-        return answer
+        if isinstance(answer, str) and is_weak_tool_summary(answer):
+            pass
+        else:
+            return answer
     row_count = offline.get("row_count")
     if row_count and int(row_count) > 0:
         offline_paths = kgqa.get("offline_recording_paths") or offline.get("offline_paths") or []
@@ -291,12 +306,22 @@ def _display_answer(kgqa: Dict[str, Any]) -> Any:
         for offline_path in offline_paths:
             payload = load_offline_payload(offline_path)
             if payload:
-                tables = collect_row_tables(payload)
-                for _name, rows in tables:
-                    if rows:
-                        preview = ", ".join(f"{k}: {v}" for k, v in rows[0].items() if v)[:400]
-                        if preview:
-                            return f"Full-scale replay returned {row_count} row(s). Top result: {preview}"
+                from demos.kg_row_narrative import pick_best_call_trace_rows, summarize_rows
+
+                question = str(kgqa.get("question") or payload.get("question") or "")
+                rows = pick_best_call_trace_rows(payload, question)
+                if not rows:
+                    tables = collect_row_tables(payload)
+                    for _name, rows in tables:
+                        if rows:
+                            break
+                if rows:
+                    text = summarize_rows(rows, question, total_count=int(row_count))
+                    if text:
+                        return text
+                    preview = ", ".join(f"{k}: {v}" for k, v in rows[0].items() if v)[:400]
+                    if preview:
+                        return f"Full-scale replay returned {row_count} row(s). Top result: {preview}"
     online = kgqa.get("online_answer")
     if not _is_blank_answer_value(online):
         return online
@@ -573,9 +598,13 @@ def _summarize_competency_tool_output(tool_content: str, question: str) -> str:
         )
 
     if "sample_results" in tool_content:
-        tail = tool_content.split("sample_results", 1)[1]
-        cleaned = re.sub(r"^--- step \d+ ---\s*", "", tail, flags=re.M)
-        cleaned = cleaned.split("next_step")[0].strip()
+        from demos.kg_row_narrative import pick_best_step_tsv, summarize_rows
+
+        cleaned = pick_best_step_tsv(tool_content, question) or ""
+        if not cleaned:
+            tail = tool_content.split("sample_results", 1)[1]
+            cleaned = re.sub(r"^--- step \d+ ---\s*", "", tail, flags=re.M)
+            cleaned = cleaned.split("next_step")[0].strip()
         parsed = parse_tabular_content(cleaned)
         if parsed:
             _cols, rows = parsed
@@ -583,6 +612,9 @@ def _summarize_competency_tool_output(tool_content: str, question: str) -> str:
                 hbond = _row_to_hbond_text(rows[0])
                 if hbond:
                     return hbond
+                structured = summarize_rows(rows, question)
+                if structured:
+                    return structured
                 preview = ", ".join(f"{k}: {v}" for k, v in rows[0].items() if v)[:400]
                 if preview:
                     return f"Top result for your question: {preview}"
@@ -779,9 +811,13 @@ def _try_direct_chemistry_workflow(
 
         tool_outputs: List[Dict[str, str]] = []
         if "sample_results" in tool_content:
-            tail = tool_content.split("sample_results", 1)[1]
-            cleaned = re.sub(r"^--- step \d+ ---\s*", "", tail, flags=re.M)
-            cleaned = cleaned.split("next_step")[0].strip()
+            from demos.kg_row_narrative import pick_best_step_tsv
+
+            cleaned = pick_best_step_tsv(tool_content, question) or ""
+            if not cleaned:
+                tail = tool_content.split("sample_results", 1)[1]
+                cleaned = re.sub(r"^--- step \d+ ---\s*", "", tail, flags=re.M)
+                cleaned = cleaned.split("next_step")[0].strip()
             parsed = parse_tabular_content(cleaned)
             if parsed:
                 _cols, rows = parsed
@@ -853,9 +889,13 @@ def _try_direct_mof_competency_workflow(
 
         tool_outputs: List[Dict[str, str]] = []
         if "sample_results" in tool_content:
-            tail = tool_content.split("sample_results", 1)[1]
-            cleaned = re.sub(r"^--- step \d+ ---\s*", "", tail, flags=re.M)
-            cleaned = cleaned.split("next_step")[0].strip()
+            from demos.kg_row_narrative import pick_best_step_tsv
+
+            cleaned = pick_best_step_tsv(tool_content, question) or ""
+            if not cleaned:
+                tail = tool_content.split("sample_results", 1)[1]
+                cleaned = re.sub(r"^--- step \d+ ---\s*", "", tail, flags=re.M)
+                cleaned = cleaned.split("next_step")[0].strip()
             parsed = parse_tabular_content(cleaned)
             if parsed:
                 cols, rows = parsed
@@ -1267,19 +1307,6 @@ def kgqa_result_to_marie(kgqa: Dict[str, Any]) -> Dict[str, Any]:
     metadata = kgqa.get("metadata") or {}
     tool_outputs = (metadata.get("tool_activity") or {}).get("tool_outputs") or []
 
-    twa = kgqa_result_to_twa(kgqa)
-    offline_tables = tables_from_zaha_items(twa.get("data") or [])
-    tool_tables = tables_from_tool_outputs(tool_outputs, skip_meta=True)
-    if tool_tables and not _substantive_marie_tables(offline_tables):
-        offline_tables = tool_tables
-    elif len(offline_tables) == 1:
-        only = offline_tables[0]
-        cols = only.get("columns") or []
-        rows = only.get("data") or []
-        if cols in (["answer"], ["Summary"]) and rows:
-            cell = str(rows[0].get(cols[0], ""))
-            if _is_weak_answer(cell):
-                offline_tables = []
     display_answer = _display_answer(kgqa)
     envelope = _competency_envelope_from_metadata(metadata)
     if envelope:
@@ -1292,6 +1319,21 @@ def kgqa_result_to_marie(kgqa: Dict[str, Any]) -> Dict[str, Any]:
         or _is_weak_answer(str(display_answer or ""))
     ):
         display_answer = summarized
+
+    kgqa_for_display = {**kgqa, "online_answer": display_answer}
+    twa = kgqa_result_to_twa(kgqa_for_display)
+    offline_tables = tables_from_zaha_items(twa.get("data") or [])
+    tool_tables = tables_from_tool_outputs(tool_outputs, skip_meta=True)
+    if tool_tables and not _substantive_marie_tables(offline_tables):
+        offline_tables = tool_tables
+    elif len(offline_tables) == 1:
+        only = offline_tables[0]
+        cols = only.get("columns") or []
+        rows = only.get("data") or []
+        if cols in (["answer"], ["Summary"]) and rows:
+            cell = str(rows[0].get(cols[0], ""))
+            if _is_weak_answer(cell):
+                offline_tables = []
     if _is_blank_answer_value(display_answer):
         display_answer = (
             f"No matching records were found in the local chemistry cache for: {question}"
@@ -1301,6 +1343,9 @@ def kgqa_result_to_marie(kgqa: Dict[str, Any]) -> Dict[str, Any]:
         tool_outputs=tool_outputs,
         online_answer=display_answer,
     )
+    from demos.table_presentation import enrich_marie_tables
+
+    marie_data = enrich_marie_tables(marie_data, question=question)
 
     narrative = build_marie_narrative(
         question,
@@ -1535,9 +1580,13 @@ def stream_chat_events(
     """SSE stream matching Zaha/Marie ./chat contract."""
     from demos.twa_format import _looks_like_raw_json, _narrative_from_data
 
+    from demos.kg_row_narrative import is_weak_tool_summary
+
     text = (narrative or "").strip()
     # Reject raw JSON / dict dumps that sometimes leak from the agent path.
     if text and _looks_like_raw_json(text):
+        text = ""
+    if text and is_weak_tool_summary(text):
         text = ""
     if not text:
         nl = _narrative_from_data(question, data_items)

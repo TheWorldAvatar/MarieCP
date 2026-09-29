@@ -30,6 +30,7 @@ DEFAULT_OFFLINE_CAP = co.DEFAULT_OFFLINE_CAP  # deprecated; offline uses full ti
 
 TOOL_REGISTRY: Dict[str, Callable[..., List[Dict[str, Any]]]] = {
     "get_pld_stats_by_mof_name": co.get_pld_stats_by_mof_name,
+    "get_pld_breakdown_by_mof_name": co.get_pld_breakdown_by_mof_name,
     "get_mofs_by_metal": co.get_mofs_by_metal,
     "get_synthesis_by_mof_name": co.get_synthesis_by_mof_name,
     "get_mof_identity_by_name": co.get_mof_identity_by_name,
@@ -47,7 +48,10 @@ TOOL_REGISTRY: Dict[str, Callable[..., List[Dict[str, Any]]]] = {
     "get_mofs_by_topology_all_sources": co.get_mofs_by_topology_all_sources,
     "get_refcodes_by_mof_name": co.get_refcodes_by_mof_name,
     "get_water_stable_mofs": co.get_water_stable_mofs,
+    "count_thermal_stable_mofs": co.count_thermal_stable_mofs,
     "get_thermal_stable_mofs": co.get_thermal_stable_mofs,
+    "get_ws24_stability_by_refcode": co.get_ws24_stability_by_refcode,
+    "get_pore_properties_by_mofid": co.get_pore_properties_by_mofid,
     "get_aqueous_low_temp_syntheses": co.get_aqueous_low_temp_syntheses,
     "get_high_binary_gas_uptake_mofs": co.get_high_binary_gas_uptake_mofs,
     "get_nist_exp_adsorption_rows": co.get_nist_exp_adsorption_rows,
@@ -73,6 +77,20 @@ def _canonical_args(args: Dict[str, Any]) -> Dict[str, Any]:
     return {k: args[k] for k in sorted(args)}
 
 
+def _effective_cache_args(tool: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge tool defaults into cache keys so query semantics stay aligned with stored rows."""
+    fn = TOOL_REGISTRY.get(tool)
+    merged = dict(args)
+    if fn is not None:
+        for name, param in inspect.signature(fn).parameters.items():
+            if name in merged or param.default is inspect.Parameter.empty:
+                continue
+            merged[name] = param.default
+    if "limit" in merged and "limit" not in args:
+        merged.pop("limit")
+    return {k: merged[k] for k in sorted(merged)}
+
+
 def cache_key(tool: str, args: Dict[str, Any], tier_or_legacy: str, row_limit: Optional[int] = None) -> str:
     tier = tier_or_legacy
     if tier in ("online", "offline", "warm"):
@@ -80,7 +98,7 @@ def cache_key(tool: str, args: Dict[str, Any], tier_or_legacy: str, row_limit: O
     probe_limit = (
         int(row_limit) if row_limit is not None and tier == TIER_PROBE else DEFAULT_ONLINE_LIMIT
     )
-    return make_cache_key(tool, _canonical_args(args), tier, probe_limit=probe_limit)
+    return make_cache_key(tool, _effective_cache_args(tool, args), tier, probe_limit=probe_limit)
 
 
 def _norm(value: Any) -> str:
@@ -189,22 +207,40 @@ class CompetencyCache:
         )
         self._conn.commit()
 
+    def _cache_key_candidates(self, tool: str, args: Dict[str, Any], tier: str) -> List[str]:
+        effective = _effective_cache_args(tool, args)
+        raw = _canonical_args(args)
+        keys: List[str] = []
+        for candidate in (effective, raw):
+            key = make_cache_key(tool, candidate, tier, probe_limit=DEFAULT_ONLINE_LIMIT)
+            if key not in keys:
+                keys.append(key)
+        return keys
+
     def has_tier(self, tool: str, args: Dict[str, Any], tier: str) -> bool:
-        key = make_cache_key(tool, _canonical_args(args), tier, probe_limit=DEFAULT_ONLINE_LIMIT)
-        cur = self._conn.execute(
-            "SELECT 1 FROM atomic_calls WHERE cache_key = ? LIMIT 1", (key,)
-        )
-        return cur.fetchone() is not None
+        for key in self._cache_key_candidates(tool, args, tier):
+            cur = self._conn.execute(
+                "SELECT 1 FROM atomic_calls WHERE cache_key = ? LIMIT 1", (key,)
+            )
+            if cur.fetchone() is not None:
+                return True
+        return False
 
     def has_full(self, tool: str, args: Dict[str, Any]) -> bool:
         return self.has_tier(tool, args, TIER_FULL)
 
     def get(self, tool: str, args: Dict[str, Any], tier: str) -> Optional[List[Dict[str, Any]]]:
-        key = make_cache_key(tool, _canonical_args(args), tier, probe_limit=DEFAULT_ONLINE_LIMIT)
-        cur = self._conn.execute(
-            "SELECT status FROM atomic_calls WHERE cache_key = ?", (key,)
-        )
-        row = cur.fetchone()
+        keys = self._cache_key_candidates(tool, args, tier)
+        row = None
+        key = keys[0]
+        for candidate_key in keys:
+            cur = self._conn.execute(
+                "SELECT status FROM atomic_calls WHERE cache_key = ?", (candidate_key,)
+            )
+            row = cur.fetchone()
+            if row is not None:
+                key = candidate_key
+                break
         if row is None:
             return None
         cur = self._conn.execute(
@@ -227,7 +263,8 @@ class CompetencyCache:
         elapsed_ms: int,
         status: str = "pass",
     ) -> str:
-        key = make_cache_key(tool, _canonical_args(args), tier, probe_limit=DEFAULT_ONLINE_LIMIT)
+        cache_args = _effective_cache_args(tool, args)
+        key = make_cache_key(tool, cache_args, tier, probe_limit=DEFAULT_ONLINE_LIMIT)
         now = time.time()
         self._conn.execute("DELETE FROM atomic_rows WHERE cache_key = ?", (key,))
         self._conn.execute("DELETE FROM atomic_calls WHERE cache_key = ?", (key,))
@@ -240,7 +277,7 @@ class CompetencyCache:
             (
                 key,
                 tool,
-                json.dumps(_canonical_args(args)),
+                json.dumps(cache_args),
                 tier,
                 row_limit,
                 DEFAULT_SPARQL_ENDPOINT,
@@ -595,7 +632,7 @@ def invoke_tool(
         if cached is not None:
             meta["from_cache"] = True
             meta["cache_key"] = make_cache_key(
-                tool, _canonical_args(args), tier, probe_limit=int(online_limit)
+                tool, _effective_cache_args(tool, args), tier, probe_limit=int(online_limit)
             )
             if own_cache:
                 ck_store.close()
@@ -605,7 +642,7 @@ def invoke_tool(
         if own_cache:
             ck_store.close()
         raise CacheMissError(
-            f"Missing full cache for tool={tool!r} args={_canonical_args(args)!r}. "
+            f"Missing full cache for tool={tool!r} args={_effective_cache_args(tool, args)!r}. "
             f"Run: python -m mini_marie.mop_mof.mof.warm_competency_cache --tool {tool}"
         )
 
@@ -643,7 +680,9 @@ def warm_full_calls(
         args = spec.get("args") or {}
         print(f"[{i}/{len(specs)}] warm {tool} {args} ...", flush=True)
         if force:
-            key = make_cache_key(tool, _canonical_args(args), TIER_FULL, probe_limit=int(online_limit))
+            key = make_cache_key(
+                tool, _effective_cache_args(tool, args), TIER_FULL, probe_limit=int(online_limit)
+            )
             cache._conn.execute("DELETE FROM atomic_rows WHERE cache_key = ?", (key,))
             cache._conn.execute("DELETE FROM atomic_calls WHERE cache_key = ?", (key,))
             cache._conn.commit()

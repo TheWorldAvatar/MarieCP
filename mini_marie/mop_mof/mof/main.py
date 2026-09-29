@@ -456,7 +456,7 @@ async def get_water_stable_mofs_tool() -> str:
 
 @mof_twa_tool_logger
 @mcp.tool(name="get_thermal_stable_mofs", description="MOFs with experimental thermal stability above min_thermal")
-async def get_thermal_stable_mofs_tool(min_thermal: float = 400) -> str:
+async def get_thermal_stable_mofs_tool(min_thermal: float = 300) -> str:
     return _competency_tsv(
         competency.get_thermal_stable_mofs(min_thermal=min_thermal, limit=MCP_ONLINE_LIMIT),
         f"No MOFs with thermal stability > {min_thermal}",

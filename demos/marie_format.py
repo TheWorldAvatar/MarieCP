@@ -247,6 +247,16 @@ def build_marie_narrative(
     data: List[Dict[str, Any]],
 ) -> str:
     """Human-readable chat stream — never dump raw tool TSV."""
+    from demos.kg_row_narrative import is_weak_tool_summary, summarize_from_data
+
+    structured = summarize_from_data(question, data)
+    if structured and (
+        not isinstance(online_answer, str)
+        or is_weak_tool_summary(online_answer)
+        or _is_weak_answer(online_answer)
+    ):
+        return structured
+
     summary_from_data = ""
     for item in data:
         if item.get("type") != "table":

@@ -431,8 +431,36 @@ const qaMetadataContainer = (function () {
     }
 })()
 
+const qaInsightContainer = (function () {
+    const elem = document.getElementById("qa-insight-container")
+
+    return {
+        reset() {
+            elem.replaceChildren()
+        },
+
+        render(narrative) {
+            this.reset()
+            if (narrative && window.MarieRichTable) {
+                MarieRichTable.renderInsightCard(narrative, elem)
+            }
+        },
+    }
+})()
+
 const qaDataContainer = (function () {
     const elem = document.getElementById("qa-data-container")
+
+    function renderTableItem(item, i) {
+        const id = `data-item-${i}`
+        if (window.MarieRichTable && (item["columns_meta"] || item["title"] || item["chart"])) {
+            MarieRichTable.renderRichDataTable(item, elem, id)
+            return
+        }
+        const vars = item["vars"] || item["columns"] || []
+        const bindings = item["bindings"] || item["data"] || []
+        renderDataTable(vars, bindings, elem, id)
+    }
 
     return {
         reset() {
@@ -445,7 +473,7 @@ const qaDataContainer = (function () {
                 item_type = item["type"]
                 id = `data-item-${i}`
                 if (item_type === "table") {
-                    renderDataTable(vars = item["vars"], bindings = item["bindings"], parentElem = elem, id = id)
+                    renderTableItem(item, i)
                 } else if (item_type === "scatter_plot") {
                     renderScatterPlot(title = item["title"], traces = item["traces"], parentElem = elem, id = id)
                 } else if (item_type === "map") {
@@ -628,6 +656,7 @@ async function askQuestion() {
 
     errorContainer.reset()
     qaMetadataContainer.reset()
+    qaInsightContainer.reset()
     qaDataContainer.reset()
     chatbotResponseCard.reset()
 
@@ -636,7 +665,11 @@ async function askQuestion() {
         qaMetadataContainer.render(results["metadata"])
         resultSection.style.display = "block"
         qaDataContainer.render(results["data"])
-        chatbotResponseCard.render(question, results["data"], results["narrative"])
+        if (results["narrative"]) {
+            qaInsightContainer.render(results["narrative"])
+        } else {
+            chatbotResponseCard.render(question, results["data"], null)
+        }
     } catch (error) {
         console.log(error.toString())
         if (error instanceof HttpError) {
