@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 _NUMERIC_KEYS = frozenset(
     {
@@ -45,8 +45,8 @@ _COLUMN_GLOSSARY: Dict[str, Dict[str, str]] = {
         "description": "Number of values aggregated in this row.",
     },
     "count": {
-        "label": "Count",
-        "description": "Number of matching records in the knowledge graph.",
+        "label": "Number of MOFs",
+        "description": "How many structures match the question filters in the knowledge graph.",
     },
     "refcode": {
         "label": "CSD refcode",
@@ -57,20 +57,20 @@ _COLUMN_GLOSSARY: Dict[str, Dict[str, str]] = {
         "description": "Dataset in the MOF knowledge graph that supplied this record.",
     },
     "source": {
-        "label": "Source",
-        "description": "Dataset or catalogue that supplied this record.",
+        "label": "Dataset",
+        "description": "Which catalogue in the knowledge graph supplied this record.",
     },
     "mofid": {
-        "label": "MOFid",
-        "description": "Structural identifier encoding chemistry and topology (MOFid v1).",
+        "label": "Structure ID (MOFid)",
+        "description": "Compact structural identifier (chemistry + topology).",
     },
     "mof": {
-        "label": "MOF entry",
-        "description": "Knowledge-graph URI or internal id for the MOF individual.",
+        "label": "Internal entry ID",
+        "description": "Technical identifier in the knowledge graph (often a URI slug).",
     },
     "name": {
-        "label": "Common name",
-        "description": "Human-readable MOF name as stored in hasNames.",
+        "label": "MOF name",
+        "description": "Common or literature name (when recorded in the graph).",
     },
     "postcomb": {
         "label": "Post-combustion uptake (mmol/g)",
@@ -101,8 +101,8 @@ _COLUMN_GLOSSARY: Dict[str, Dict[str, str]] = {
         "description": "Solvents used during synthesis.",
     },
     "topology": {
-        "label": "Topology (RCSR)",
-        "description": "Reticular Chemistry Structure Resource symbol for the net.",
+        "label": "Network topology",
+        "description": "RCSR symbol for the underlying crystal net (e.g. sod, pcu).",
     },
     "space_group": {
         "label": "Space group",
@@ -172,11 +172,98 @@ _COLUMN_GLOSSARY: Dict[str, Dict[str, str]] = {
         "label": "Predicted water stability",
         "description": "Model or literature-derived water stability score for the framework.",
     },
+    "burtch": {
+        "label": "Burtch label (experimental)",
+        "description": "WS24 experimental water-stability class (values ≥ 3 indicate high stability).",
+    },
+    "acid": {
+        "label": "Acid stability (experimental)",
+        "description": "Reported acid stability for the framework.",
+    },
+    "base": {
+        "label": "Base stability (experimental)",
+        "description": "Reported base stability for the framework.",
+    },
+    "details": {
+        "label": "Stability notes",
+        "description": "Additional experimental stability information from the source record.",
+    },
     "temperatureunit": {
         "label": "Temperature unit",
         "description": "Unit for synthesis temperature (e.g. Kelvin or Celsius).",
     },
+    "display_label": {
+        "label": "MOF",
+        "description": "Best available short label (name, refcode, or chemistry/topology hint).",
+    },
+    "display_detail": {
+        "label": "At a glance",
+        "description": "Dataset, topology, and other context for this row.",
+    },
+    "temperature": {
+        "label": "Synthesis temperature",
+        "description": "Temperature reported for the synthesis step.",
+    },
 }
+
+# Preferred column order for demo tables (human-facing first).
+_COLUMN_DISPLAY_PRIORITY: Tuple[str, ...] = (
+    "display_label",
+    "name",
+    "refcode",
+    "mofid",
+    "metal",
+    "topology",
+    "thermal",
+    "postcomb",
+    "precomb",
+    "water_pred",
+    "burtch",
+    "acid",
+    "base",
+    "details",
+    "yield",
+    "method",
+    "solvents",
+    "solvent",
+    "temperature",
+    "tempc",
+    "temp",
+    "temperatureunit",
+    "temperatureUnit",
+    "temp_unit",
+    "sourcedb",
+    "source",
+    "doi",
+    "space_group",
+    "avgpld",
+    "avgPLD",
+    "variance",
+    "n",
+    "count",
+    "pld",
+    "lcd",
+    "lfpd",
+    "gsa",
+    "asa",
+    "density",
+    "display_detail",
+    "node",
+    "linker",
+    "mof",
+)
+
+# Keys shown only when user toggles “Technical fields”.
+_TECHNICAL_DEFAULT_KEYS = frozenset(
+    {
+        "mof",
+        "node",
+        "linker",
+        "mof_iri",
+        "mof_uri",
+        "name_lc",
+    }
+)
 
 # Token replacements for fallback label generation (longest first).
 _LABEL_TOKEN_REPLACEMENTS = (
@@ -222,6 +309,37 @@ def infer_column_kind(key: str, rows: Sequence[Dict[str, Any]]) -> str:
     return "text"
 
 
+_WATER_TOKENS = frozenset({"h2o", "water", "distilled water", "deionized water", "deionised water"})
+
+
+def normalize_synthesis_solvents(value: Any) -> str:
+    """Clean solvent lists for display: drop bare numbers, unify water/H2O."""
+    if value in (None, ""):
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    parts: List[str] = []
+    seen: set[str] = set()
+    for raw in re.split(r"[;|]", text):
+        tok = raw.strip()
+        if not tok:
+            continue
+        if re.fullmatch(r"[\d.]+", tok):
+            continue
+        low = tok.lower()
+        if low in _WATER_TOKENS or low == "h2o":
+            tok = "water"
+        elif "water" in low and len(low) < 40:
+            tok = "water"
+        key = tok.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        parts.append(tok)
+    return "; ".join(parts)
+
+
 def _looks_numeric(value: Any) -> bool:
     try:
         float(value)
@@ -259,11 +377,82 @@ def _fallback_label(key: str) -> str:
     return " ".join(words)
 
 
-def human_column_label(key: str) -> str:
+def human_column_label(key: str, *, columns: Optional[Sequence[str]] = None) -> str:
     entry = _glossary_entry(key)
     if entry:
         return entry["label"]
     return _fallback_label(key)
+
+
+def _resolve_key(name: str, keys: Sequence[str]) -> Optional[str]:
+    key_set = set(keys)
+    if name in key_set:
+        return name
+    lower_map = {k.lower(): k for k in keys}
+    return lower_map.get(name.lower())
+
+
+def _display_detail_redundant_with_source(
+    keys: Sequence[str],
+    rows: Sequence[Dict[str, Any]],
+) -> bool:
+    src = _resolve_key("sourcedb", keys) or _resolve_key("source", keys)
+    det = _resolve_key("display_detail", keys)
+    if not src or not det or not rows:
+        return False
+    for row in rows[: min(40, len(rows))]:
+        if str(row.get(det) or "").strip() != str(row.get(src) or "").strip():
+            return False
+    return True
+
+
+def plan_display_columns(
+    keys: Sequence[str],
+    rows: Sequence[Dict[str, Any]],
+) -> Tuple[List[str], List[str]]:
+    """Order columns for humans and split default-visible vs technical."""
+    if not keys:
+        return [], []
+
+    ordered: List[str] = []
+    seen: set[str] = set()
+    for pref in _COLUMN_DISPLAY_PRIORITY:
+        actual = _resolve_key(pref, keys)
+        if actual and actual not in seen:
+            ordered.append(actual)
+            seen.add(actual)
+    for key in keys:
+        if key not in seen:
+            ordered.append(key)
+            seen.add(key)
+
+    has_display = _resolve_key("display_label", keys) is not None
+    has_sourcedb = _resolve_key("sourcedb", keys) is not None
+    only_count = len(ordered) == 1 and _resolve_key("count", ordered) is not None
+    detail_is_redundant = _display_detail_redundant_with_source(ordered, rows)
+
+    visible: List[str] = []
+    hidden: List[str] = []
+    for key in ordered:
+        lk = key.lower()
+        hide = lk in _TECHNICAL_DEFAULT_KEYS
+        if lk == "mof" and has_display:
+            hide = True
+        if lk == "source" and has_sourcedb:
+            hide = True
+        if lk == "display_detail" and detail_is_redundant:
+            hide = True
+        if only_count and lk == "count":
+            hide = False
+        (hidden if hide else visible).append(key)
+    return visible, hidden
+
+
+def column_header_label(key: str, *, all_columns: Sequence[str]) -> str:
+    """Context-aware header text for UI and exports."""
+    if len(all_columns) == 1 and key.lower() == "count":
+        return "Number of matching MOFs"
+    return human_column_label(key)
 
 
 def human_column_description(key: str) -> str:
@@ -297,7 +486,7 @@ def _chart_spec(columns: Sequence[str], rows: Sequence[Dict[str, Any]]) -> Optio
     cols = list(columns)
     lower = [c.lower() for c in cols]
     label_key = None
-    for candidate in ("refcode", "name", "mofid", "mof"):
+    for candidate in ("display_label", "refcode", "name", "mofid", "mof"):
         if candidate in lower:
             label_key = cols[lower.index(candidate)]
             break
@@ -331,24 +520,53 @@ def enrich_table_item(
     if not vars_ or not bindings:
         return item
 
+    from demos.mof_display_identity import (
+        enrich_rows_with_display_identity,
+        table_benefits_from_display_column,
+    )
+
+    bindings = enrich_rows_with_display_identity(bindings)
+    for row in bindings:
+        for sk in ("solvents", "solvent"):
+            if sk in row and row.get(sk) not in (None, ""):
+                row[sk] = normalize_synthesis_solvents(row[sk])
+    if table_benefits_from_display_column(bindings):
+        extra = [k for k in ("display_label", "display_detail") if bindings[0].get(k)]
+        vars_ = extra + [v for v in vars_ if v not in extra]
+
+    visible_cols, hidden_cols = plan_display_columns(vars_, bindings)
+    ordered_cols = visible_cols + hidden_cols
+
     columns_meta: List[Dict[str, Any]] = []
-    for key in vars_:
+    for key in ordered_cols:
         columns_meta.append(
             {
                 "key": key,
-                "label": human_column_label(key),
+                "label": column_header_label(key, all_columns=ordered_cols),
                 "description": human_column_description(key),
                 "kind": infer_column_kind(key, bindings),
+                "visible": key in visible_cols,
             }
         )
 
     enriched = dict(item)
-    enriched["vars"] = list(vars_)
+    enriched["vars"] = ordered_cols
+    enriched["display_columns"] = visible_cols
+    enriched["technical_columns"] = hidden_cols
     enriched["bindings"] = bindings
-    enriched["title"] = item.get("title") or _table_title(question, vars_, len(bindings))
+    enriched["title"] = item.get("title") or _table_title(
+        question, visible_cols or ordered_cols, len(bindings)
+    )
     enriched["row_count"] = len(bindings)
     enriched["columns_meta"] = columns_meta
-    chart = _chart_spec(vars_, bindings)
+    chart = _chart_spec(visible_cols or ordered_cols, bindings)
+    if chart:
+        y_key = chart.get("y_key")
+        if y_key:
+            chart["y_label"] = column_header_label(y_key, all_columns=ordered_cols)
+        x_key = chart.get("x_key")
+        if x_key:
+            chart["x_label"] = column_header_label(x_key, all_columns=ordered_cols)
     if chart:
         enriched["chart"] = chart
     enriched["table_index"] = table_index
@@ -387,7 +605,15 @@ def enrich_marie_tables(data: Sequence[Dict[str, Any]], *, question: str = "") -
             "columns": enriched.get("vars") or [],
             "data": enriched.get("bindings") or [],
         }
-        for key in ("title", "row_count", "columns_meta", "chart", "table_index"):
+        for key in (
+            "title",
+            "row_count",
+            "columns_meta",
+            "chart",
+            "table_index",
+            "display_columns",
+            "technical_columns",
+        ):
             if key in enriched:
                 marie_item[key] = enriched[key]
         out.append(marie_item)

@@ -543,7 +543,11 @@ def main() -> None:
             f"buildings={sg.get('building_rows')} land_plots={sg.get('land_plot_rows')}"
         )
     except Exception as exc:
-        print(f"  SG Ontop status unavailable: {exc}")
+        msg = str(exc)
+        hint = ""
+        if "malformed" in msg.lower():
+            hint = " — run: python -m mini_marie.zaha.sg_old.recover_ontop_cache"
+        print(f"  SG Ontop status unavailable: {msg}{hint}")
     app.run(host=host, port=port, debug=False, threaded=True)
 
 

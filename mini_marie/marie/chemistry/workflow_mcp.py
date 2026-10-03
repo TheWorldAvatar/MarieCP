@@ -21,12 +21,9 @@ MCP_ONLINE_LIMIT = DEFAULT_ONLINE_PROBE_LIMIT
 
 
 def _demo_force_refresh() -> bool:
-    return os.environ.get("DEMO_FORCE_REFRESH", "true").strip().lower() not in (
-        "0",
-        "false",
-        "no",
-        "off",
-    )
+    from mini_marie.demo_runtime import demo_force_refresh
+
+    return demo_force_refresh()
 
 
 def list_competency_workflows_text() -> str:

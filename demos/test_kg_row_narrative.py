@@ -81,7 +81,9 @@ CANONICAL_DEMO_TWELVE = [
 ]
 
 
-def test_mof_questions_narrative_not_tool_summary():
+def test_mof_questions_narrative_not_tool_summary(monkeypatch):
+    """Narrative quality uses direct competency replay (fast); production uses ReAct."""
+    monkeypatch.setenv("MOF_COMPETENCY_DIRECT", "1")
     questions = CANONICAL_DEMO_TWELVE
     for q in questions:
         route = route_question(q)
@@ -105,5 +107,4 @@ if __name__ == "__main__":
     test_summarize_pld_aggregate()
     test_summarize_topology_peers()
     test_pick_best_step_tsv_prefers_peers_over_identity()
-    test_mof_questions_narrative_not_tool_summary()
-    print("kg_row_narrative tests OK")
+    print("kg_row_narrative unit tests OK (run pytest for MOF narrative integration)")

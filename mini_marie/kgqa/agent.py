@@ -68,9 +68,14 @@ class KgqaAgent:
             if entry.domain == "mof":
                 workflow_hint = (
                     f"\nCatalog match: workflow_id `{entry.workflow_id}`. "
-                    "You MUST call `run_competency_online` with this exact workflow_id first. "
-                    "Do not substitute atomic tools for catalog competency questions."
+                    "Interpret the user's question, then:\n"
+                    "1. Call `run_competency_online` with this exact workflow_id.\n"
+                    "2. If sample rows lack MOF names/refcodes, call `enrich_mof_table_rows` "
+                    "with those rows as a JSON array before your final answer.\n"
+                    "3. Summarize tool results in plain language (names, refcodes, counts, units).\n"
+                    "Do not substitute ad-hoc atomic tools for this catalog workflow."
                     f"{param_hint}"
+                    f"{self._mof_identity_enrichment_hint()}"
                 )
             elif entry.domain == "chemistry":
                 workflow_hint = (
@@ -129,6 +134,10 @@ class KgqaAgent:
                     "Do NOT use mof-twa."
                 )
 
+        mof_enrich_hint = ""
+        if route.domain == "mof" or "mof" in (route.domains or []):
+            mof_enrich_hint = self._mof_identity_enrichment_hint()
+
         servers = ", ".join(route.mcp_servers)
         domain_labels = ", ".join(route.domains) if route.domains else route.domain
         return f"""You are a KGQA assistant for The World Avatar knowledge graphs.
@@ -136,6 +145,7 @@ class KgqaAgent:
 **Loaded MCP servers:** {servers}
 **Routing:** {route.reason} (domains: {domain_labels})
 {workflow_hint}
+{mof_enrich_hint}
 
 **User question:**
 {question}
@@ -150,6 +160,18 @@ class KgqaAgent:
 
 Provide a clear, structured answer citing key numeric results from tool output.
 """
+
+    @staticmethod
+    def _mof_identity_enrichment_hint() -> str:
+        return (
+            "\n**MOF identity enrichment (mandatory when rows lack human labels):**\n"
+            "- After `run_competency_online`, if sample rows have `mof` / entry ids but missing "
+            "`name` or `refcode`, call `enrich_mof_table_rows` with those rows as JSON "
+            "**before** your final answer.\n"
+            "- For a plain list of MOF entry tokens/IRIs, use `lookup_mof_identity_by_entries`.\n"
+            "- In summaries, prefer **name**, **refcode**, or **MOFid** — not raw internal slugs.\n"
+            "- You must base the answer on MCP tool output; do not invent MOF data.\n"
+        )
 
     def _city_parameters_hint(self, workflow_id: str = "city_ranked_buildings") -> str:
         try:

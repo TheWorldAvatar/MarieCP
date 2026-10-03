@@ -44,7 +44,16 @@ _TOPOLOGY_CATALOG_RE = re.compile(
     re.I,
 )
 _STABILITY_SIGNAL_KEYS = frozenset(
-    {"water_pred", "burtch", "burtchlabel", "acidstability", "basestability"}
+    {
+        "water_pred",
+        "burtch",
+        "burtchlabel",
+        "acid",
+        "base",
+        "details",
+        "acidstability",
+        "basestability",
+    }
 )
 
 
@@ -56,6 +65,12 @@ def human_number(value: Any) -> str:
     if num.is_integer():
         return f"{int(num):,}"
     return f"{num:,.2f}".rstrip("0").rstrip(".")
+
+
+def mof_display_line(row: Dict[str, Any]) -> str:
+    from demos.mof_display_identity import mof_row_display_line
+
+    return mof_row_display_line(row)
 
 
 def short_label(value: Any) -> str:
@@ -586,11 +601,28 @@ def _summarize_water_stability_rows(
     ]
     for row in rows[:_TOP_N_DEFAULT]:
         raw_name = str(row.get("name") or "").strip()
-        name = raw_name if raw_name and raw_name != "-" else short_label(row.get("mof"))
-        name = name or "MOF"
-        signal = row.get("water_pred") or row.get("burtch") or row.get("burtchlabel")
+        from demos.mof_display_identity import mof_row_display_label
+
+        name = (
+            mof_row_display_label(row)
+            if row.get("mof") or row.get("mofid")
+            else (raw_name if raw_name and raw_name != "-" else "MOF")
+        )
+        wp = row.get("water_pred")
+        burtch = row.get("burtch") or row.get("burtchlabel")
+        acid = row.get("acid")
+        base = row.get("base")
+        sig_bits: List[str] = []
+        if wp not in (None, ""):
+            sig_bits.append(f"predicted **{human_number(wp)}**")
+        if burtch not in (None, ""):
+            sig_bits.append(f"Burtch **{human_number(burtch)}**")
+        if acid:
+            sig_bits.append(f"acid: {str(acid)[:40]}")
+        if base:
+            sig_bits.append(f"base: {str(base)[:40]}")
+        sig_bit = f" — {', '.join(sig_bits)}" if sig_bits else ""
         src = row.get("sourcedb") or row.get("source") or ""
-        sig_bit = f" — score/label **{human_number(signal)}**" if signal not in (None, "") else ""
         src_bit = f" ({src})" if src else ""
         lines.append(f"- **{name}**{sig_bit}{src_bit}")
     if total > _TOP_N_DEFAULT:
@@ -611,10 +643,14 @@ def _summarize_synthesis_condition_corpus(
         f"**{total:,}** synthesis record(s) match **aqueous / low-temperature** filters (sample):"
     ]
     for row in rows[:_TOP_N_DEFAULT]:
-        entry = short_label(row.get("mof")) or row.get("name") or "MOF"
+        from demos.mof_display_identity import mof_row_display_label
+
+        entry = mof_row_display_label(row)
         temp = row.get("temperature") or row.get("temp")
         unit = str(row.get("temperatureUnit") or row.get("temp_unit") or "").strip()
-        solv = row.get("solvents") or row.get("solvent") or ""
+        from demos.table_presentation import normalize_synthesis_solvents
+
+        solv = normalize_synthesis_solvents(row.get("solvents") or row.get("solvent") or "")
         method = row.get("method") or ""
         src = row.get("sourcedb") or row.get("source") or ""
         temp_bit = (
@@ -624,7 +660,7 @@ def _summarize_synthesis_condition_corpus(
         )
         method_bit = f", **{method}**" if method else ""
         src_bit = f" ({src})" if src else ""
-        solv_short = str(solv)[:120] + ("…" if len(str(solv)) > 120 else "")
+        solv_short = solv[:120] + ("…" if len(solv) > 120 else "")
         lines.append(
             f"- `{entry}`{temp_bit}{method_bit}; solvents: {solv_short}{src_bit}"
         )
@@ -647,14 +683,11 @@ def _summarize_chemistry_fragment_rows(
         str(r.get("sourcedb") or r.get("source") or "unknown") for r in rows
     )
     if by_source:
-        top_src = by_source.most_common(3)
+        top_src = by_source.most_common(8)
         src_line = ", ".join(f"**{s}** ({n:,})" for s, n in top_src)
         lines.append(f"By source in sample: {src_line}.")
     for row in rows[:_TOP_N_DEFAULT]:
-        label = short_label(row.get("mof")) or row.get("name") or "entry"
-        src = row.get("sourcedb") or row.get("source") or ""
-        src_bit = f" ({src})" if src else ""
-        lines.append(f"- `{label}`{src_bit}")
+        lines.append(f"- {mof_display_line(row)}")
     return "\n".join(lines)
 
 
@@ -766,12 +799,7 @@ def _summarize_topology_peers(
 
     lines = [header, "Other MOFs with the same topology include:"]
     for row in peer_rows[:_TOP_N_DEFAULT]:
-        mofid = row.get("mofid") or short_label(row.get("mof"))
-        refcode = row.get("refcode") or ""
-        source = row.get("source") or row.get("sourcedb") or ""
-        ref_bit = f", refcode **{refcode}**" if refcode else ""
-        src_bit = f" from **{source}**" if source else ""
-        lines.append(f"- `{mofid}`{ref_bit}{src_bit}")
+        lines.append(f"- {mof_display_line(row)}")
     if len(peer_rows) > _TOP_N_DEFAULT:
         lines.append(f"- … and **{len(peer_rows) - _TOP_N_DEFAULT}** more in the table.")
     return "\n".join(lines)

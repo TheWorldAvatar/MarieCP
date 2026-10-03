@@ -157,6 +157,7 @@ class CompetencyCache:
                 cache_key TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_facet_identity_name ON facet_identity(name_lc);
+            CREATE INDEX IF NOT EXISTS idx_facet_identity_mof ON facet_identity(mof);
 
             CREATE TABLE IF NOT EXISTS facet_synthesis (
                 name_lc TEXT,
@@ -408,7 +409,43 @@ class CompetencyCache:
             """,
             (_norm_lc(mof_name),),
         )
-        return [dict(r) for r in cur]
+        return [self._identity_row_to_result(dict(r)) for r in cur]
+
+    @staticmethod
+    def _identity_row_to_result(row: Dict[str, Any]) -> Dict[str, Any]:
+        out = dict(row)
+        if out.get("sourcedb") and not out.get("source"):
+            out["source"] = out["sourcedb"]
+        return out
+
+    def local_identity_by_mof_keys(self, mof_keys: List[str]) -> List[Dict[str, Any]]:
+        """Best-effort identity from warmed facet_identity (offline enrichment)."""
+        if not mof_keys:
+            return []
+        out: List[Dict[str, Any]] = []
+        seen: set[str] = set()
+        for raw in mof_keys[:80]:
+            key = _norm(raw)
+            if not key:
+                continue
+            cur = self._conn.execute(
+                """
+                SELECT name_lc, mof, sourcedb, topology, space_group, refcode, mofid
+                FROM facet_identity
+                WHERE mof = ? OR mof LIKE ?
+                LIMIT 5
+                """,
+                (key, f"%{key[-48:]}%"),
+            )
+            for row in cur:
+                item = self._identity_row_to_result(dict(row))
+                mof = _norm(item.get("mof"))
+                if mof and mof in seen:
+                    continue
+                if mof:
+                    seen.add(mof)
+                out.append(item)
+        return out
 
     def local_topology_sample(
         self,

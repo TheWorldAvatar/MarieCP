@@ -217,7 +217,7 @@ def build_marie_metadata(
     ]
     entity_bindings = {f"step_{i}": [name] for i, name in enumerate(executed, start=1)}
 
-    return {
+    meta: Dict[str, Any] = {
         "rewritten_question": question,
         "translation_context": {"properties": properties, "examples": []},
         "data_request": {
@@ -227,6 +227,9 @@ def build_marie_metadata(
         },
         "linked_variables": {},
     }
+    if kgqa.get("metadata", {}).get("agent_driven") is True:
+        meta["agent_driven"] = True
+    return meta
 
 
 def _narrative_is_question_echo(text: str, question: str) -> bool:

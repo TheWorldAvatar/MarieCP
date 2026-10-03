@@ -199,7 +199,7 @@ def get_mof_identity_by_name(mof_name: str, *, limit: Optional[int] = None) -> L
     nf = _name_filter_exact(mof_name)
     query = f"""
 PREFIX mofs: <{MOFS_PREFIX}>
-SELECT ?name ?sourcedb ?topology ?space_group ?refcode ?mofid
+SELECT ?mof ?name ?sourcedb ?topology ?space_group ?refcode ?mofid
 WHERE {{
   ?mof mofs:hasNames ?name .
   OPTIONAL {{ ?mof mofs:hasSourcedb ?sourcedb }}
@@ -290,15 +290,22 @@ WHERE {{
   }}"""
     query = f"""
 PREFIX mofs: <{MOFS_PREFIX}>
-SELECT ?mof ?source ?topology
+SELECT ?mof ?source ?topology ?name ?refcode ?mofid
 WHERE {{
   ?mof mofs:hasSourcedb ?source ; mofs:hasRCSRSym ?topology .
   FILTER(LCASE(STR(?topology)) = "{topo}")
+  OPTIONAL {{ ?mof mofs:hasNames ?name }}
+  OPTIONAL {{ ?mof mofs:hasCsdRefcode ?refcode }}
+  OPTIONAL {{ ?mof mofs:hasMofidV1 ?mofid }}
   {excl}
 }}
 {_limit_suffix(limit)}
 """
-    return execute_sparql(query, timeout=90)
+    rows = execute_sparql(query, timeout=120)
+    for row in rows:
+        if row.get("source") and not row.get("sourcedb"):
+            row["sourcedb"] = row["source"]
+    return rows
 
 
 def count_hypothetical_same_topology_as(reference_name: str) -> List[Dict[str, Any]]:
@@ -434,9 +441,21 @@ def get_mofs_by_metal_and_linker(
     *,
     limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
-    """MOFs with Zr node and carboxylate-like linker (David Q1)."""
+    """MOFs with Zr node and carboxylate-like linker (David Q1 / CompetencyQs §1)."""
     node_f = _escape_literal(metal_fragment.strip().lower())
     link_f = _escape_literal(linker_fragment.strip().lower())
+    # David competency: Zr in node AND (N in node OR carboxylate in linker).
+    # Default metal/linker args match the canonical Zr + carboxylate demo question.
+    if node_f == "zr" and link_f == "c(=o)o":
+        filter_expr = (
+            'CONTAINS(LCASE(STR(?node)), "zr") && '
+            '(CONTAINS(LCASE(STR(?node)), "n") || CONTAINS(LCASE(STR(?linker)), "c(=o)o"))'
+        )
+    else:
+        filter_expr = (
+            f'CONTAINS(LCASE(STR(?node)), "{node_f}") && '
+            f'CONTAINS(LCASE(STR(?linker)), "{link_f}")'
+        )
     query = f"""
 PREFIX mofs: <{MOFS_PREFIX}>
 SELECT DISTINCT ?mof ?node ?linker ?sourcedb
@@ -445,12 +464,9 @@ WHERE {{
        mofs:hasNodeSmile ?node ;
        mofs:hasLinkerSmile ?linker ;
        mofs:hasSourcedb ?sourcedb .
-  FILTER (
-    CONTAINS(LCASE(STR(?node)), "{node_f}") &&
-    CONTAINS(LCASE(STR(?linker)), "{link_f}")
-  )
+  FILTER ({filter_expr})
 }}
-ORDER BY ?mof
+ORDER BY ?sourcedb ?mof
 {_limit_suffix(limit)}
 """
     return execute_sparql(query, timeout=120)
@@ -494,21 +510,29 @@ ORDER BY ?refcode
 
 
 def get_water_stable_mofs(limit: Optional[int] = None) -> List[Dict[str, Any]]:
-    """MOFs with predicted/experimental water stability signals (David Q5)."""
+    """MOFs with predicted/experimental water stability (David Q5 / CompetencyQs §5)."""
     query = f"""
 PREFIX mofs: <{MOFS_PREFIX}>
-SELECT DISTINCT ?mof ?name ?water_pred ?burtch ?sourcedb
+SELECT DISTINCT ?mof ?name ?refcode ?water_pred ?burtch ?acid ?base ?details ?sourcedb
 WHERE {{
   ?mof a mofs:MetalOrganicFramework ; mofs:hasSourcedb ?sourcedb .
   OPTIONAL {{ ?mof mofs:hasNames ?name }}
+  OPTIONAL {{ ?mof mofs:hasCsdRefcode ?refcode }}
   OPTIONAL {{ ?mof mofs:hasPredictedWaterStability ?water_pred }}
   OPTIONAL {{ ?mof mofs:hasBurtchLabel ?burtch }}
+  OPTIONAL {{ ?mof mofs:hasExperimentalAcidStability ?acid }}
+  OPTIONAL {{ ?mof mofs:hasExperimentalBaseStability ?base }}
+  OPTIONAL {{ ?mof mofs:hasExperimentalStabilityInformation ?details }}
   FILTER (
     (BOUND(?water_pred) && ?water_pred > 0.5) ||
-    (BOUND(?burtch) && ?burtch >= 3)
+    (BOUND(?burtch) && ?burtch >= 3) ||
+    CONTAINS(LCASE(STR(COALESCE(?acid, ""))), "stable") ||
+    CONTAINS(LCASE(STR(COALESCE(?base, ""))), "stable") ||
+    CONTAINS(LCASE(STR(COALESCE(?details, ""))), "water") ||
+    CONTAINS(LCASE(STR(COALESCE(?details, ""))), "humid")
   )
 }}
-ORDER BY DESC(?water_pred)
+ORDER BY DESC(?water_pred) ?burtch
 {_limit_suffix(limit)}
 """
     return execute_sparql(query, timeout=120)

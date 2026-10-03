@@ -117,7 +117,7 @@
             [{ type: "bar", x, y, marker: { color: "#3b82f6" } }],
             {
                 margin: { t: 24, r: 16, b: 80, l: 56 },
-                xaxis: { title: chart.x_key, tickangle: -35 },
+                xaxis: { title: chart.x_label || chart.x_key, tickangle: -35 },
                 yaxis: { title: chart.y_label || chart.y_key },
                 paper_bgcolor: "rgba(0,0,0,0)",
                 plot_bgcolor: "rgba(0,0,0,0)",
@@ -127,9 +127,17 @@
     }
 
     function renderRichDataTable(item, parentElem, id) {
-        const vars = item.vars || item.columns || [];
+        const allVars = item.vars || item.columns || [];
+        const displayCols = item.display_columns || allVars;
+        const vars = displayCols.length ? displayCols : allVars;
         const bindings = item.bindings || item.data || [];
         const metaMap = columnMetaMap(item);
+        const technicalKeys = new Set(item.technical_columns || []);
+        allVars.forEach((key) => {
+            if (!metaMap[key]) {
+                metaMap[key] = { key, label: key, visible: !technicalKeys.has(key) };
+            }
+        });
         const tableId = `${id}-table`;
         const chartId = `${id}-chart`;
 
@@ -148,7 +156,7 @@
                 </div>
                 <div class="marie-rich-table-toolbar">
                     <button type="button" class="marie-btn-ghost marie-export-csv">Export CSV</button>
-                    <button type="button" class="marie-btn-ghost marie-toggle-iri">Hide IRIs</button>
+                    <button type="button" class="marie-btn-ghost marie-toggle-technical">Show technical fields</button>
                 </div>
             </div>
             ${item.chart ? `<div class="marie-chart-wrap" id="${chartId}"></div>` : ""}
@@ -160,21 +168,17 @@
         `;
         parentElem.appendChild(card);
 
-        const thead = vars.map((key) => {
+        const thead = allVars.map((key) => {
             const meta = metaMap[key] || {};
             const label = meta.label || key;
             const description = meta.description || "";
-            const kgHint = meta.key && meta.key !== label ? meta.key : key;
-            const title = description
-                ? `${description} (KG field: ${kgHint})`
-                : `KG field: ${kgHint}`;
-            return `<th title="${escapeHtml(title)}">
+            const title = description || label;
+            return `<th title="${escapeHtml(title)}" data-col-key="${escapeHtml(key)}">
                 <span class="marie-th-label">${escapeHtml(label)}</span>
-                <span class="marie-th-kg">${escapeHtml(kgHint)}</span>
             </th>`;
         }).join("");
         const tbody = bindings.map((row, idx) => {
-            const cells = vars.map((key) => {
+            const cells = allVars.map((key) => {
                 const formatted = formatCellValue(key, row[key], metaMap[key]);
                 return `<td data-order="${escapeHtml(row[key] ?? "")}">${formatted}</td>`;
             }).join("");
@@ -205,27 +209,30 @@
                 dom: '<"row mb-2"<"col-sm-6"l><"col-sm-6"f>>rtip',
             });
 
-            const toggleBtn = card.querySelector(".marie-toggle-iri");
-            function toggleIri() {
-                const rowNum = dt.rows().count();
-                if (rowNum === 0) {
-                    return;
-                }
-                const showing = toggleBtn.textContent === "Hide IRIs";
-                const rowData = dt.row(0).data();
-                const iriCols = rowData.reduce((arr, val, idx) => {
-                    if (typeof val === "string" && TWA_ABOX_IRI_PREFIXES.some((p) => val.startsWith(p))) {
-                        arr.push(idx);
-                    }
-                    return arr;
-                }, []);
-                iriCols.forEach((colIdx) => {
-                    dt.column(colIdx).visible(!showing);
+            const toggleBtn = card.querySelector(".marie-toggle-technical");
+            const technicalColIdx = allVars
+                .map((key, idx) => ({ key, idx: idx + 1 }))
+                .filter(({ key }) => technicalKeys.has(key) || metaMap[key]?.visible === false)
+                .map(({ idx }) => idx);
+
+            function applyTechnicalVisibility(showTechnical) {
+                technicalColIdx.forEach((colIdx) => {
+                    dt.column(colIdx).visible(showTechnical);
                 });
-                toggleBtn.textContent = showing ? "Show IRIs" : "Hide IRIs";
+                toggleBtn.textContent = showTechnical
+                    ? "Hide technical fields"
+                    : "Show technical fields";
             }
-            toggleIri();
-            toggleBtn.addEventListener("click", toggleIri);
+
+            if (technicalColIdx.length) {
+                applyTechnicalVisibility(false);
+                toggleBtn.addEventListener("click", () => {
+                    const showing = toggleBtn.textContent.startsWith("Hide");
+                    applyTechnicalVisibility(!showing);
+                });
+            } else {
+                toggleBtn.style.display = "none";
+            }
         }, 0);
 
         return card;

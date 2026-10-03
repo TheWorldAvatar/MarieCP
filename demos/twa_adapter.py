@@ -195,23 +195,15 @@ _DEFAULT_OFFLINE_CAP = 500_000
 
 
 def _demo_auto_offline() -> bool:
-    """Match core KGQA default: replay full cache when a recording exists."""
-    return os.environ.get("DEMO_AUTO_OFFLINE", "true").strip().lower() not in (
-        "0",
-        "false",
-        "no",
-        "off",
-    )
+    from mini_marie.demo_runtime import demo_auto_offline
+
+    return demo_auto_offline()
 
 
 def _demo_force_refresh() -> bool:
-    """Bypass SPARQL/tool result cache so each question runs a fresh online probe."""
-    return os.environ.get("DEMO_FORCE_REFRESH", "true").strip().lower() not in (
-        "0",
-        "false",
-        "no",
-        "off",
-    )
+    from mini_marie.demo_runtime import demo_force_refresh
+
+    return demo_force_refresh()
 
 
 def _replay_offline_if_enabled(
@@ -1225,7 +1217,20 @@ def _try_direct_mop_competency(
     }
 
 
-def _try_direct_from_route(question: str, route: RouteResult) -> Optional[Dict[str, Any]]:
+def _mof_competency_direct_bypass_enabled() -> bool:
+    """MOF catalog workflows use ReAct + MCP by default; opt in to Python direct bypass."""
+    import os
+
+    for key in ("MOF_COMPETENCY_DIRECT", "MARIE_MOF_DIRECT"):
+        if os.environ.get(key, "").strip().lower() in ("1", "true", "yes"):
+            return True
+    return False
+
+
+def _try_direct_from_route(
+    question: str,
+    route: RouteResult,
+) -> Optional[Dict[str, Any]]:
     cross = _try_direct_cross_domain(question, route)
     if cross:
         return cross
@@ -1235,9 +1240,10 @@ def _try_direct_from_route(question: str, route: RouteResult) -> Optional[Dict[s
     mop = _try_direct_mop_competency(question, route)
     if mop:
         return mop
-    mof = _try_direct_mof_competency_workflow(question, route)
-    if mof:
-        return mof
+    if _mof_competency_direct_bypass_enabled():
+        mof = _try_direct_mof_competency_workflow(question, route)
+        if mof:
+            return mof
     sg = _try_direct_sg_tool(question, route)
     if sg:
         return sg
@@ -1301,11 +1307,46 @@ def _resolve_offline_recording_paths(kgqa: Dict[str, Any]) -> List[str]:
     return paths
 
 
+def _kg_enrich_marie_table_identities(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Offline KG identity merge + demo display columns (all MOF tables)."""
+    from mini_marie.mop_mof.mof.competency_cache import CompetencyCache
+    from mini_marie.mop_mof.mof.mof_identity_enrichment import (
+        enrich_mof_rows,
+        extract_mof_keys_from_rows,
+    )
+
+    if not data:
+        return data
+    cache = CompetencyCache()
+    out: List[Dict[str, Any]] = []
+    for item in data:
+        if item.get("type") != "table":
+            out.append(item)
+            continue
+        rows = item.get("data") or item.get("bindings") or []
+        if not isinstance(rows, list) or not extract_mof_keys_from_rows(rows):
+            out.append(item)
+            continue
+        enriched = enrich_mof_rows(rows, cache=cache, allow_remote=False)
+        merged = dict(item)
+        if item.get("data") is not None:
+            merged["data"] = enriched
+        if item.get("bindings") is not None:
+            merged["bindings"] = enriched
+        out.append(merged)
+    return out
+
+
 def kgqa_result_to_marie(kgqa: Dict[str, Any]) -> Dict[str, Any]:
     """Convert orchestrator output to Marie chemistry demo POST /api/qa/ shape."""
     question = kgqa.get("question") or ""
     metadata = kgqa.get("metadata") or {}
-    tool_outputs = (metadata.get("tool_activity") or {}).get("tool_outputs") or []
+    tool_activity = metadata.get("tool_activity") or {}
+    tool_outputs = list(tool_activity.get("tool_outputs") or [])
+    if not tool_outputs:
+        for name in tool_activity.get("executed_tool_names") or []:
+            if name:
+                tool_outputs.append({"name": name, "content": ""})
 
     display_answer = _display_answer(kgqa)
     envelope = _competency_envelope_from_metadata(metadata)
@@ -1343,6 +1384,7 @@ def kgqa_result_to_marie(kgqa: Dict[str, Any]) -> Dict[str, Any]:
         tool_outputs=tool_outputs,
         online_answer=display_answer,
     )
+    marie_data = _kg_enrich_marie_table_identities(marie_data)
     from demos.table_presentation import enrich_marie_tables
 
     marie_data = enrich_marie_tables(marie_data, question=question)
@@ -1484,6 +1526,9 @@ async def _run_kgqa_core(
             recursion_limit=recursion_limit,
             route=route,
         )
+        kgqa.setdefault("metadata", {})["agent_driven"] = True
+    else:
+        kgqa.setdefault("metadata", {})["agent_driven"] = False
     return kgqa
 
 
@@ -1527,6 +1572,7 @@ async def run_marie_qa(
         "narrative": narrative,
     }
     payload["request_id"] = request_id
+    payload["narrative"] = narrative
     return payload
 
 

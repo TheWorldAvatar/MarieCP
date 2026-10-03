@@ -420,12 +420,20 @@ const qaMetadataContainer = (function () {
 
     return {
         reset() {
-            elem.style.display = "none"
-            tableContainer.replaceChildren()
+            if (elem) {
+                elem.style.display = "none"
+            }
+            if (tableContainer) {
+                tableContainer.replaceChildren()
+            }
         },
 
         render(metadata) {
-            displayQaSteps(metadata["steps"])
+            const steps = (metadata && metadata["steps"]) || []
+            if (!steps.length || !tableContainer || !elem) {
+                return
+            }
+            displayQaSteps(steps)
             elem.style.display = "block"
         },
     }
@@ -436,12 +444,14 @@ const qaInsightContainer = (function () {
 
     return {
         reset() {
-            elem.replaceChildren()
+            if (elem) {
+                elem.replaceChildren()
+            }
         },
 
         render(narrative) {
             this.reset()
-            if (narrative && window.MarieRichTable) {
+            if (narrative && elem && window.MarieRichTable) {
                 MarieRichTable.renderInsightCard(narrative, elem)
             }
         },
