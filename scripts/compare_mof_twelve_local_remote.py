@@ -15,6 +15,12 @@ if str(REPO) not in sys.path:
 
 from demos.test_kg_row_narrative import CANONICAL_DEMO_TWELVE  # noqa: E402
 
+_HEADERS = {
+    "User-Agent": "MarieCP-compare/1.0 (TheWorldAvatar demo QA)",
+    "Content-Type": "application/json",
+    "Accept": "application/json",
+}
+
 
 def _post(base: str, question: str, timeout: int) -> dict:
     url = f"{base.rstrip('/')}/demos/marie/api/qa"
@@ -22,7 +28,7 @@ def _post(base: str, question: str, timeout: int) -> dict:
     req = urllib.request.Request(
         url,
         data=body,
-        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        headers=_HEADERS,
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
