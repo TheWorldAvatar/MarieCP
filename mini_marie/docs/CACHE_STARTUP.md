@@ -12,6 +12,8 @@ export PYTHONPATH="$(pwd)"
 
 Caches: `data/mini_marie_cache/` (`MINI_MARIE_DATA_DIR` to override).
 
+**Demo server:** keep `DEMO_AUTO_OFFLINE=true` and `DEMO_FORCE_REFRESH=false` (see `configs/demo_fullstack.env`) so every workflow step reads the warmed SQLite tier and offline replay fills full tables.
+
 **Interactive helper:**
 
 ```bash
@@ -51,20 +53,40 @@ python -c "from mini_marie.kg_catalog import catalog; print(catalog.kg_cache_sta
 | 2 Warm | `python -m mini_marie.mop_mof.mof.warm_competency_cache --workflow CQ06_TOPOLOGY_ZIF8 --missing-only` |
 | 3 Replay | `python -m mini_marie.mop_mof.mof.replay_competency_offline --recording <path-from-step-1>` |
 | 4 Expand | `python -m mini_marie.mop_mof.mof.warm_competency_cache --comprehensive --missing-only` |
+| 5 Identity test | `python scripts/run_mof_agent_identity_test.py --offline-only` → see `docs/MOF_AGENT_IDENTITY_TEST.md` |
+
+After changing peer-list SPARQL (name/refcode OPTIONALs), re-warm **`CQ07_SAME_TOPO_ZIF8`** so cache and demo tables pick up identity fields.
+
+After updating **`get_mofs_by_metal_and_linker`** or **`get_water_stable_mofs`** SPARQL, re-warm **`CQ_D1_ZR_COOH`** and **`CQ_D5_WATER_STABLE`** (or `--comprehensive --missing-only`).
 
 ---
 
-## 2. TWA city (Bremen / KL)
+## 2. TWA city (Bremen / KL / Pirmasens)
 
 **Path:** `data/mini_marie_cache/twa_city/city_cache.sqlite`
 
 | Step | Command |
 |------|---------|
 | 0 Status | `python -m mini_marie.zaha.twa_city.warm_city_cache --status` |
-| 1 Atomics | `python -m mini_marie.zaha.twa_city.warm_city_cache --city bremen --atomics-only --missing-only` |
-| 2 Locations | `python -m mini_marie.zaha.twa_city.warm_city_cache --city bremen --locations-only --locations-top-n 50 --missing-only` |
-| 3 Workflow | `run_workflow` then `replay_workflow` for `top10_buildings_locations_bremen` |
-| 4 Full (optional) | `--comprehensive --missing-only` |
+| 1 Page profile | `python -m mini_marie.zaha.twa_city.warm_city_cache --page-questions` |
+| 2 Atomics | `python -m mini_marie.zaha.twa_city.warm_city_cache --city bremen --atomics-only --missing-only` |
+| 3 Locations | `python -m mini_marie.zaha.twa_city.warm_city_cache --city bremen --locations-only --locations-top-n 50 --missing-only` |
+| 4 Pirmasens UBEM | `python -m mini_marie.zaha.twa_city.warm_city_cache --city pirmasens --atomics-only --missing-only --include-ubem` |
+| 4b Pirmasens Ontop | `python -m mini_marie.zaha.twa_city.warm_pirmasens_ontop_cache --page-questions --missing-only` |
+| 4c All page caches | `python -m demos.warm_german_city_caches --all-page` |
+| 5 Workflow | `run_workflow` then `replay_workflow` for `top10_buildings_locations_bremen` |
+| 6 Full (optional) | `--comprehensive --missing-only` |
+
+Zaha German-city dropdown uses top-N WKT: Bremen 14, Kaiserslautern 10, Pirmasens 12 (`--page-questions`).
+
+**Pirmasens Ontop** (toilet / plots / solarthermie + city named stats): `data/mini_marie_cache/twa_city/pirmasens_ontop_cache.sqlite`
+
+```bash
+python -m mini_marie.zaha.twa_city.warm_pirmasens_ontop_cache --status
+python -m mini_marie.zaha.twa_city.warm_pirmasens_ontop_cache --page-questions --missing-only
+```
+
+Upload both `city_cache.sqlite` and `pirmasens_ontop_cache.sqlite` to the Zaha deploy volume (`MINI_MARIE_DATA_DIR` / `mini_marie_data`).
 
 ---
 
@@ -88,6 +110,13 @@ Repeat step 2 until coverage stops improving.
 ## 4. Singapore (sg-old)
 
 **Path:** `data/mini_marie_cache/sg_old/ontop_cache.sqlite`
+
+If startup logs `database disk image is malformed`, stop the demo server and run:
+
+```bash
+python -m mini_marie.zaha.sg_old.recover_ontop_cache
+python -m mini_marie.zaha.sg_old.recover_ontop_cache --full   # complete warm
+```
 
 ```bash
 python -m mini_marie.zaha.sg_old.warm_ontop_cache --names-only --page-size 500

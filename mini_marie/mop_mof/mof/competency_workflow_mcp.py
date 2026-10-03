@@ -70,11 +70,15 @@ def format_competency_mcp_response(result: Dict[str, Any], recording_path: Path)
 
 
 def run_competency_online(workflow_id: str, online_limit: int = MCP_ONLINE_LIMIT) -> str:
+    from mini_marie.demo_runtime import demo_force_refresh, demo_use_cache
+
     wf = load_workflow(workflow_id)
     result = run_competency_workflow(
         wf,
         mode="online",
         online_limit=min(online_limit, MCP_ONLINE_LIMIT),
+        use_cache=demo_use_cache(),
+        force_refresh=demo_force_refresh(),
     )
     path = save_run(result)
     return format_competency_mcp_response(result, path)
@@ -84,7 +88,9 @@ def replay_competency_offline(recording_path: str) -> str:
     path = Path(recording_path)
     recorded = json.loads(path.read_text(encoding="utf-8"))
     wf = recorded.get("workflow_definition") or load_workflow(str(recorded.get("workflow_id")))
-    result = replay_competency_from_recording(recorded, wf)
+    from mini_marie.demo_runtime import demo_use_cache
+
+    result = replay_competency_from_recording(recorded, wf, use_cache=demo_use_cache())
     result["replayed_from"] = str(path.resolve())
     out_path = save_run(result)
     return format_competency_mcp_response(result, out_path)

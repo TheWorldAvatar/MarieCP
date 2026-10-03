@@ -37,24 +37,36 @@ step_mof() {
 }
 
 step_city() {
-  echo "=== TWA city cache (Bremen + Kaiserslautern) ==="
+  echo "=== TWA city cache (Bremen + Kaiserslautern + Pirmasens) ==="
   pause_step "Step 0: Check current cache status"
   python -m mini_marie.zaha.twa_city.warm_city_cache --status
 
-  pause_step "Step 1/4: Atomics only — Bremen (fast)"
+  pause_step "Step 1/6: Zaha German-city dropdown profile (atomics + top-N WKT)"
+  python -m mini_marie.zaha.twa_city.warm_city_cache --page-questions
+
+  pause_step "Step 2/6: Atomics only — Bremen (fast)"
   python -m mini_marie.zaha.twa_city.warm_city_cache \
     --city bremen --atomics-only --missing-only
 
-  pause_step "Step 2/4: Atomics only — Kaiserslautern"
+  pause_step "Step 3/6: Atomics only — Kaiserslautern"
   python -m mini_marie.zaha.twa_city.warm_city_cache \
     --city kaiserslautern --atomics-only --missing-only
 
-  pause_step "Step 3/4: WKT locations for top 50 buildings — Bremen (minutes)"
+  pause_step "Step 4/6: Atomics only — Pirmasens (incl. UBEM row pools)"
+  python -m mini_marie.zaha.twa_city.warm_city_cache \
+    --city pirmasens --atomics-only --missing-only
+
+  pause_step "Step 4b/7: Pirmasens Ontop (toilet/plots/solar + city stats for Zaha page)"
+  python -m mini_marie.zaha.twa_city.warm_pirmasens_ontop_cache \
+    --page-questions --missing-only
+
+  pause_step "Step 5/7: WKT locations for top 50 buildings — Bremen (minutes)"
   python -m mini_marie.zaha.twa_city.warm_city_cache \
     --city bremen --locations-only --locations-top-n 50 --missing-only
 
-  pause_step "Step 4/4: Status check"
-  python -m mini_marie.zaha.twa_city.city_cache_status --city bremen
+  pause_step "Step 6/7: Status check (all cities)"
+  python -m mini_marie.zaha.twa_city.city_cache_status
+  python -m mini_marie.zaha.twa_city.warm_pirmasens_ontop_cache --status
 
   echo "City warm steps finished. Optional full comprehensive warm (hours):"
   echo "  python -m mini_marie.zaha.twa_city.warm_city_cache --comprehensive --missing-only"
@@ -109,7 +121,7 @@ Cache warm helper — small steps only.
 
 Domains:
   mof        MOF competency SQLite (remote)
-  city       Bremen/KL city SQLite (remote)
+  city       Bremen/KL/Pirmasens city SQLite (remote)
   chemistry  Blazegraph atomics + corpus (remote, batched)
   sg         Singapore Ontop SQLite (remote, paginated)
   mops       Local merged_tll label index (no network)

@@ -1,0 +1,264 @@
+{
+  "_pattern": {
+    "atomic_sparql": [
+      "1. list_pirmasens_endpoints or resolve endpoint_id (toilet, plots, solarthermie)",
+      "2. run_sparql(endpoint_id, query) — generic SELECT; optional filter_row_pool on TSV output"
+    ],
+    "list_entities": [
+      "list_entities(endpoint_id, class_iri) — atomic class listing before filter_rows"
+    ]
+  },
+  "endpoints": {
+    "toilet": "https://pirmasens.cmpg.io/ontop-toilet/sparql/",
+    "plots": "https://pirmasens.cmpg.io/ontop-plots/sparql/",
+    "solarthermie": "https://pirmasens.cmpg.io/ontop-solarthermie/sparql/"
+  },
+  "questions": [
+    {
+      "id": "TO-CQ01",
+      "question": "What public toilets are available in the knowledge graph?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["list_entities", "run_sparql"],
+      "endpoint_id": "toilet",
+      "class_iri": "https://www.theworldavatar.com/kg/ontobuiltenv/Toilet",
+      "tags": ["pirmasens", "toilet", "corpus"],
+      "difficulty": "easy",
+      "probe_sequence": ["list_entities"]
+    },
+    {
+      "id": "TO-CQ02",
+      "question": "What is the location (geometry) of each public toilet?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_sparql"],
+      "endpoint_id": "toilet",
+      "tags": ["pirmasens", "toilet", "geo"],
+      "difficulty": "easy",
+      "probe_sequence": ["run_sparql"]
+    },
+    {
+      "id": "TO-CQ03",
+      "question": "Which public toilets are wheelchair accessible?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_sparql"],
+      "endpoint_id": "toilet",
+      "tags": ["pirmasens", "toilet", "filter"],
+      "difficulty": "easy",
+      "probe_sequence": ["run_sparql"]
+    },
+    {
+      "id": "TO-CQ04",
+      "question": "Which public toilets are not wheelchair accessible?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_sparql"],
+      "endpoint_id": "toilet",
+      "tags": ["pirmasens", "toilet", "filter"],
+      "difficulty": "easy",
+      "probe_sequence": ["run_sparql"]
+    },
+    {
+      "id": "TO-CQ05",
+      "question": "Which public toilets require a usage fee?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_sparql"],
+      "endpoint_id": "toilet",
+      "tags": ["pirmasens", "toilet", "filter"],
+      "difficulty": "easy",
+      "probe_sequence": ["run_sparql"],
+      "min_rows": 0
+    },
+    {
+      "id": "TO-CQ06",
+      "question": "Which public toilets are free to use?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_sparql"],
+      "endpoint_id": "toilet",
+      "tags": ["pirmasens", "toilet", "filter"],
+      "difficulty": "easy",
+      "probe_sequence": ["run_sparql"]
+    },
+    {
+      "id": "TO-CQ07",
+      "question": "Which public toilets provide facilities for both male and female users?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_sparql"],
+      "endpoint_id": "toilet",
+      "tags": ["pirmasens", "toilet", "filter"],
+      "difficulty": "medium",
+      "probe_sequence": ["run_sparql"],
+      "min_rows": 0
+    },
+    {
+      "id": "PL-CQ01",
+      "question": "What plots are available in the knowledge graph?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["list_entities", "run_sparql"],
+      "endpoint_id": "plots",
+      "class_iri": "https://www.theworldavatar.com/kg/ontoplot/Plot",
+      "tags": ["pirmasens", "plots", "corpus"],
+      "difficulty": "easy",
+      "probe_sequence": ["list_entities"]
+    },
+    {
+      "id": "PL-CQ02",
+      "question": "Which zone does each plot belong to?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_sparql"],
+      "endpoint_id": "plots",
+      "tags": ["pirmasens", "plots", "zoning"],
+      "difficulty": "easy",
+      "probe_sequence": ["run_sparql"]
+    },
+    {
+      "id": "PL-CQ03",
+      "question": "What is the area of each plot?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_sparql"],
+      "endpoint_id": "plots",
+      "tags": ["pirmasens", "plots", "geo"],
+      "difficulty": "easy",
+      "probe_sequence": ["run_sparql"]
+    },
+    {
+      "id": "PL-CQ04",
+      "question": "What is the geometry (WKT) of each plot?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_sparql"],
+      "endpoint_id": "plots",
+      "tags": ["pirmasens", "plots", "geo"],
+      "difficulty": "easy",
+      "probe_sequence": ["run_sparql"]
+    },
+    {
+      "id": "PL-CQ05",
+      "question": "What is the maximum permitted building height for each plot?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_sparql"],
+      "endpoint_id": "plots",
+      "tags": ["pirmasens", "plots", "regulations"],
+      "difficulty": "medium",
+      "probe_sequence": ["run_sparql"]
+    },
+    {
+      "id": "PL-CQ06",
+      "question": "What is the maximum permitted site coverage (GRZ) for each plot?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_sparql"],
+      "endpoint_id": "plots",
+      "tags": ["pirmasens", "plots", "regulations"],
+      "difficulty": "medium",
+      "probe_sequence": ["run_sparql"]
+    },
+    {
+      "id": "PL-CQ07",
+      "question": "What is the permitted building mass ratio (BMZ) for each plot?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_sparql"],
+      "endpoint_id": "plots",
+      "tags": ["pirmasens", "plots", "regulations"],
+      "difficulty": "medium",
+      "probe_sequence": ["run_sparql"]
+    },
+    {
+      "id": "PL-CQ08",
+      "question": "What is the maximum permitted height above normal null (OK) for each plot?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_sparql"],
+      "endpoint_id": "plots",
+      "tags": ["pirmasens", "plots", "regulations"],
+      "difficulty": "medium",
+      "probe_sequence": ["run_sparql"]
+    },
+    {
+      "id": "PL-CQ09",
+      "question": "Which plots belong to zoning category Automeile?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_sparql"],
+      "endpoint_id": "plots",
+      "tags": ["pirmasens", "plots", "zoning", "filter"],
+      "difficulty": "medium",
+      "probe_sequence": ["run_sparql"]
+    },
+    {
+      "id": "PL-CQ10",
+      "question": "What zoning type is associated with each zone?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_sparql"],
+      "endpoint_id": "plots",
+      "tags": ["pirmasens", "plots", "zoning"],
+      "difficulty": "easy",
+      "probe_sequence": ["run_sparql"]
+    },
+    {
+      "id": "PL-CQ11",
+      "question": "Which plots permit buildings taller than 20 metres?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_sparql", "filter_row_pool"],
+      "endpoint_id": "plots",
+      "tags": ["pirmasens", "plots", "filter"],
+      "difficulty": "medium",
+      "probe_sequence": ["run_sparql", "filter_rows:height>20"],
+      "min_rows": 0
+    },
+    {
+      "id": "PL-CQ12",
+      "question": "Which plots allow a site coverage greater than 0.6?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_sparql", "filter_row_pool"],
+      "endpoint_id": "plots",
+      "tags": ["pirmasens", "plots", "filter"],
+      "difficulty": "medium",
+      "probe_sequence": ["run_sparql", "filter_rows:grz>0.6"]
+    },
+    {
+      "id": "ST-CQ01",
+      "question": "Which buildings have solar thermal collectors installed?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_sparql", "list_entities"],
+      "endpoint_id": "solarthermie",
+      "tags": ["pirmasens", "solarthermie", "corpus"],
+      "difficulty": "easy",
+      "probe_sequence": ["run_sparql"]
+    },
+    {
+      "id": "ST-CQ02",
+      "question": "What is the annual heat supply of the plate thermal collectors for each building?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_sparql"],
+      "endpoint_id": "solarthermie",
+      "tags": ["pirmasens", "solarthermie", "heat"],
+      "difficulty": "medium",
+      "probe_sequence": ["run_sparql"]
+    },
+    {
+      "id": "ST-CQ03",
+      "question": "What is the annual heat supply of the tube thermal collectors?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_sparql"],
+      "endpoint_id": "solarthermie",
+      "tags": ["pirmasens", "solarthermie", "heat"],
+      "difficulty": "medium",
+      "probe_sequence": ["run_sparql"]
+    },
+    {
+      "id": "ST-CQ04",
+      "question": "Which buildings have roofs suitable for solar collectors?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_sparql"],
+      "endpoint_id": "solarthermie",
+      "tags": ["pirmasens", "solarthermie", "filter"],
+      "difficulty": "medium",
+      "probe_sequence": ["run_sparql"],
+      "min_rows": 0
+    },
+    {
+      "id": "ST-CQ05",
+      "question": "Which buildings achieve annual CO2 savings greater than 50 kg/m²?",
+      "mcp_servers": ["twa-city"],
+      "tools": ["run_sparql", "filter_row_pool"],
+      "endpoint_id": "solarthermie",
+      "tags": ["pirmasens", "solarthermie", "co2", "filter"],
+      "difficulty": "medium",
+      "probe_sequence": ["run_sparql", "filter_rows:co2>50"]
+    }
+  ]
+}

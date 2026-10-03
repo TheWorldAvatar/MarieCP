@@ -1,0 +1,12 @@
+PREFIX ubem: <http://www.theworldavatar.com/kg/ontoubemmp/>
+PREFIX om: <http://www.ontology-of-units-of-measure.org/resource/om-2/>
+SELECT
+  (COUNT(?heat) AS ?measure_count)
+  (MIN(?num) AS ?min_kwh_per_m2)
+  (MAX(?num) AS ?max_kwh_per_m2)
+  (AVG(?num) AS ?avg_kwh_per_m2)
+WHERE {
+  ?heat a ubem:AnnualHeatSupply .
+  ?heat om:hasValue ?val .
+  ?val om:hasNumericalValue ?num .
+}

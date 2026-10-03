@@ -44,7 +44,7 @@ class CityBuildingQueryPlan(BaseModel):
 
 def normalize_city_name(city: str) -> str:
     key = city.strip().lower().replace(" ", "_").replace("-", "_")
-    aliases = {"kl": "kaiserslautern", "kaiserslautern": "kaiserslautern", "bremen": "bremen"}
+    aliases = {"kl": "kaiserslautern", "kaiserslautern": "kaiserslautern", "bremen": "bremen", "pirmasens": "pirmasens"}
     key = aliases.get(key, key)
     if key not in CITY_ENDPOINTS:
         allowed = ", ".join(sorted(CITY_ENDPOINTS))

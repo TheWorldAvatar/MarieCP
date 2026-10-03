@@ -1,11 +1,14 @@
 """Backend smoke test: Marie homepage questions → POST /demos/marie/api/qa shape.
 
-Uses direct competency workflows where catalogued (fast, no LLM). Questions
-without a workflow_id are routing-checked only unless --llm is passed.
+MOF catalog questions use the ReAct agent by default; local smoke checks routing
+only unless `--llm`. Use `--llm` (or HTTP against a server with `REMOTE_API_KEY`)
+to execute MOF workflows via MCP.
+
+Set `MOF_COMPETENCY_DIRECT=1` (or `MARIE_MOF_DIRECT=1`) for the old Python bypass.
 
 Run from repo root:
   python -m demos.test_marie_page_questions
-  python -m demos.test_marie_page_questions --llm          # also run LLM for all
+  python -m demos.test_marie_page_questions --llm          # ReAct agent for MOF
   python -m demos.test_marie_page_questions --http         # hit running server
 """
 
@@ -115,12 +118,19 @@ def _evaluate_payload(payload: Dict[str, Any], *, expect_data: bool) -> tuple[bo
     return True, narrative[:160], rows
 
 
-def _run_direct(question: str) -> Dict[str, Any]:
+def _run_direct_competency(question: str) -> Dict[str, Any]:
+    """Direct competency bypass (opt-in via MOF_COMPETENCY_DIRECT; not default)."""
     from demos.twa_adapter import _try_direct_from_route, kgqa_result_to_marie
     from mini_marie.kgqa.mcp_router import route_question
 
     route = route_question(question)
-    kgqa = _try_direct_from_route(question, route)
+    import os
+
+    os.environ["MOF_COMPETENCY_DIRECT"] = "1"
+    try:
+        kgqa = _try_direct_from_route(question, route)
+    finally:
+        os.environ.pop("MOF_COMPETENCY_DIRECT", None)
     if not kgqa:
         raise RuntimeError("direct workflow path returned None")
     payload = kgqa_result_to_marie(kgqa)
@@ -193,15 +203,45 @@ def run_tests(*, use_http: bool, use_llm: bool, base_url: str, llm_timeout: int)
                 )
                 continue
 
-            if wf:
-                payload = _run_direct(q)
+            if wf and entry.domain == "mof" and not use_llm:
+                import os
+
+                direct_env = os.environ.get("MOF_COMPETENCY_DIRECT") or os.environ.get(
+                    "MARIE_MOF_DIRECT", ""
+                )
+                if direct_env.strip().lower() in ("1", "true", "yes"):
+                    payload = _run_direct_competency(q)
+                    ok, detail, rows = _evaluate_payload(payload, expect_data=True)
+                    results.append(
+                        QuestionResult(
+                            mq, q, "direct", ok, detail, int((time.perf_counter() - t0) * 1000), rows, wf
+                        )
+                    )
+                    continue
+                ok, detail = _check_route(entry)
+                results.append(
+                    QuestionResult(
+                        mq,
+                        q,
+                        "route-only",
+                        ok,
+                        detail + " (MOF uses ReAct by default — run with --llm or MOF_COMPETENCY_DIRECT=1)",
+                        int((time.perf_counter() - t0) * 1000),
+                        0,
+                        wf,
+                    )
+                )
+                continue
+
+            if wf and entry.domain != "mof":
+                payload = _run_direct_competency(q)
                 ok, detail, rows = _evaluate_payload(payload, expect_data=True)
                 results.append(
                     QuestionResult(mq, q, "direct", ok, detail, int((time.perf_counter() - t0) * 1000), rows, wf)
                 )
                 continue
 
-            if use_llm:
+            if use_llm or (wf and entry.domain == "mof"):
                 payload = asyncio.run(_run_llm(q))
                 ok, detail, rows = _evaluate_payload(payload, expect_data=True)
                 results.append(
@@ -263,7 +303,11 @@ def _print_report(results: List[QuestionResult]) -> int:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Backend test for Marie homepage questions")
     parser.add_argument("--http", action="store_true", help="Call running demo server HTTP API")
-    parser.add_argument("--llm", action="store_true", help="Run LLM agent for questions without direct workflow")
+    parser.add_argument(
+        "--llm",
+        action="store_true",
+        help="Run ReAct agent (required to execute MOF catalog workflows locally)",
+    )
     parser.add_argument("--base-url", default="http://127.0.0.1:8080", help="Demo server base URL (--http)")
     parser.add_argument("--llm-timeout", type=int, default=120, help="Per-question timeout seconds")
     args = parser.parse_args()

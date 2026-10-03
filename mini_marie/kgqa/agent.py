@@ -68,9 +68,14 @@ class KgqaAgent:
             if entry.domain == "mof":
                 workflow_hint = (
                     f"\nCatalog match: workflow_id `{entry.workflow_id}`. "
-                    "You MUST call `run_competency_online` with this exact workflow_id first. "
-                    "Do not substitute atomic tools for catalog competency questions."
+                    "Interpret the user's question, then:\n"
+                    "1. Call `run_competency_online` with this exact workflow_id.\n"
+                    "2. If sample rows lack MOF names/refcodes, call `enrich_mof_table_rows` "
+                    "with those rows as a JSON array before your final answer.\n"
+                    "3. Summarize tool results in plain language (names, refcodes, counts, units).\n"
+                    "Do not substitute ad-hoc atomic tools for this catalog workflow."
                     f"{param_hint}"
+                    f"{self._mof_identity_enrichment_hint()}"
                 )
             elif entry.domain == "chemistry":
                 workflow_hint = (
@@ -83,9 +88,12 @@ class KgqaAgent:
                 )
             elif entry.domain == "city":
                 workflow_hint = (
-                    "\nCity question: use twa-city atomic workflow tools. "
-                    "Call `run_workflow_online('city_ranked_buildings', parameters_json=<JSON you compose>)`."
-                    f"{self._city_parameters_hint()}"
+                    f"\nCatalog match: workflow `{entry.workflow_id}`. "
+                    "You MUST call `run_workflow_online` with this exact workflow name first. "
+                    "Pass parameters_json from the parsed parameters below — do not substitute "
+                    "`city_ranked_buildings` or atomic height tools for UBEM heat/CO2 workflows."
+                    f"{param_hint}"
+                    f"{self._city_parameters_hint(entry.workflow_id)}"
                 )
         else:
             domain = entry.domain if entry else route.domain
@@ -102,14 +110,16 @@ class KgqaAgent:
                 )
             elif domain == "mops":
                 workflow_hint = (
-                    "\nMOP polyhedra question: use twa-mops and/or chemistry-ontomops tools only. "
+                    "\nMOP polyhedra question: use remote Blazegraph tools only "
+                    "(get_mops_by_outer_diameter_min, get_mops_by_cbu_formula, "
+                    "get_assembly_models_by_polyhedral_shape, get_mops_by_reference_doi). "
                     "Do NOT use mof-twa Metal-Organic Framework corpus tools."
                 )
             elif "twa-mops" in route.mcp_servers:
                 workflow_hint = (
-                    "\nMOP instance question: call twa-mops tools for synthesis recipes, CBU, CCDC, "
-                    "and polyhedra data. chemistry-ontomops only has T-box routing — do not stop at "
-                    "ontomops_instance_routing; query twa-mops for actual MOP individuals."
+                    "\nMOP question: call remote Blazegraph tools on twa-mops "
+                    "(geometry/CBU/provenance/DOI). Page-listed competency questions have direct routing. "
+                    "chemistry-ontomops mirrors the same remote tools."
                 )
             elif domain == "city" or "twa-city" in route.mcp_servers:
                 workflow_hint = (
@@ -124,6 +134,10 @@ class KgqaAgent:
                     "Do NOT use mof-twa."
                 )
 
+        mof_enrich_hint = ""
+        if route.domain == "mof" or "mof" in (route.domains or []):
+            mof_enrich_hint = self._mof_identity_enrichment_hint()
+
         servers = ", ".join(route.mcp_servers)
         domain_labels = ", ".join(route.domains) if route.domains else route.domain
         return f"""You are a KGQA assistant for The World Avatar knowledge graphs.
@@ -131,6 +145,7 @@ class KgqaAgent:
 **Loaded MCP servers:** {servers}
 **Routing:** {route.reason} (domains: {domain_labels})
 {workflow_hint}
+{mof_enrich_hint}
 
 **User question:**
 {question}
@@ -146,36 +161,56 @@ class KgqaAgent:
 Provide a clear, structured answer citing key numeric results from tool output.
 """
 
-    def _city_parameters_hint(self) -> str:
+    @staticmethod
+    def _mof_identity_enrichment_hint() -> str:
+        return (
+            "\n**MOF identity enrichment (mandatory when rows lack human labels):**\n"
+            "- After `run_competency_online`, if sample rows have `mof` / entry ids but missing "
+            "`name` or `refcode`, call `enrich_mof_table_rows` with those rows as JSON "
+            "**before** your final answer.\n"
+            "- For a plain list of MOF entry tokens/IRIs, use `lookup_mof_identity_by_entries`.\n"
+            "- In summaries, prefer **name**, **refcode**, or **MOFid** — not raw internal slugs.\n"
+            "- You must base the answer on MCP tool output; do not invent MOF data.\n"
+        )
+
+    def _city_parameters_hint(self, workflow_id: str = "city_ranked_buildings") -> str:
         try:
             from mini_marie.zaha.twa_city.workflow_engine import load_workflow
 
-            wf = load_workflow("city_ranked_buildings")
+            wf = load_workflow(workflow_id)
             schema = wf.get("parameters") or {}
             if not schema:
                 return ""
+            height_note = (
+                'Use sort_field "height" (not measuredHeight). '
+                if workflow_id == "city_ranked_buildings"
+                else ""
+            )
             return (
                 "\nParameters schema keys: "
                 f"{', '.join(schema.keys())}. "
                 "Compose parameters_json from the user question. "
-                "Use sort_field \"height\" (not measuredHeight). "
-                "Set include_locations true when the question asks where buildings are. "
+                f"{height_note}"
+                "Set include_locations true when the question asks where buildings are or requests a footprint map. "
+                "Do not call generate_building_map for Zaha demo answers — use city_ranked_buildings with include_locations. "
                 "For multiple cities, call run_workflow_online once per city with its own parameters_json. "
                 "When the question asks to label rows (e.g. with city), set row_annotations in parameters_json "
-                "to the columns to add, e.g. {\"city\": \"bremen\"} (city is also auto-stamped from the city param). "
+                'to the columns to add, e.g. {"city": "bremen"} (city is also auto-stamped from the city param). '
                 "Do not use legacy top10/top50 workflow names."
             )
         except (FileNotFoundError, ImportError, ValueError):
             return ""
 
     def _workflow_parameter_hint(self, workflow_id: str, question: str, domain: str) -> str:
-        if domain not in ("chemistry", "mof"):
+        if domain not in ("chemistry", "mof", "city"):
             return ""
         try:
             if domain == "chemistry":
                 from mini_marie.marie.chemistry.chemistry_workflow_engine import load_workflow
-            else:
+            elif domain == "mof":
                 from mini_marie.mop_mof.mof.competency_workflow_engine import load_workflow
+            else:
+                from mini_marie.zaha.twa_city.workflow_engine import load_workflow
             from mini_marie.workflow_parameters import (
                 parameters_hint_text,
                 resolve_workflow_parameters,
@@ -184,7 +219,15 @@ Provide a clear, structured answer citing key numeric results from tool output.
             wf = load_workflow(workflow_id)
             if not wf.get("parameters"):
                 return ""
-            params = resolve_workflow_parameters(wf, question)
+            overrides = None
+            if domain == "city":
+                from demos.german_city_specs import resolve_city_workflow_parameters
+
+                params = resolve_city_workflow_parameters(question, workflow_id)
+                return parameters_hint_text(params).replace(
+                    "run_competency_online", "run_workflow_online"
+                )
+            params = resolve_workflow_parameters(wf, question, overrides)
             return parameters_hint_text(params)
         except (KeyError, ImportError, ValueError):
             return ""

@@ -235,10 +235,9 @@ def query_zeolite_property(
 
 
 def ontomops_instance_note() -> str:
-    return (
-        "OntoMOPs A-box is not in chemistry Blazegraph (ontomops namespace is empty). "
-        "Use MCP servers `twa-mops` (synthesis) or `mof-twa` (MOF properties) for MOP instance data."
-    )
+    from mini_marie.mop_mof.mops.remote_mcp import ontomops_data_routing_note
+
+    return ontomops_data_routing_note()
 
 
 def search_species_names(

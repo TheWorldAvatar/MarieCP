@@ -1,0 +1,5 @@
+SELECT ?class (COUNT(?x) AS ?count)
+WHERE { ?x a ?class }
+GROUP BY ?class
+ORDER BY DESC(?count)
+LIMIT 25

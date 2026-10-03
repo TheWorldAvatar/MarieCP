@@ -1,0 +1,109 @@
+<!DOCTYPE html><html><head><meta charset='utf-8'>
+<title>MOF twelve E2E</title>
+<style>body{font-family:system-ui;max-width:960px;margin:24px auto;padding:0 16px}
+h1{font-size:1.4rem}.ok{color:#0a0}.fail{color:#c00}.q{margin-top:1.5rem;border-top:1px solid #ddd;padding-top:12px}
+pre{white-space:pre-wrap;background:#f6f6f6;padding:12px;font-size:13px}</style></head><body>
+<h1>Marie MOF — 12 question E2E</h1>
+<p>Generated 2026-10-02 18:42 UTC · <strong>12/12</strong> passed · Base URL: http://127.0.0.1:8080</p>
+<table border='1' cellpadding='6' cellspacing='0' style='border-collapse:collapse;width:100%'>
+<tr><th>#</th><th>Status</th><th>ms</th><th>Rows</th><th>Question</th></tr>
+<tr><td>1</td><td class='ok'>OK</td><td>24333</td><td>1</td><td>What are the average and variance of the pore limiting diameter for UiO-66?</td></tr>
+<tr><td>2</td><td class='ok'>OK</td><td>21065</td><td>150</td><td>Which MOFs have the same topology as ZIF-8?</td></tr>
+<tr><td>3</td><td class='ok'>OK</td><td>5224</td><td>1</td><td>What synthesis routes are recorded for UiO-66?</td></tr>
+<tr><td>4</td><td class='ok'>OK</td><td>30057</td><td>500</td><td>Which MOFs are reported as thermally stable?</td></tr>
+<tr><td>5</td><td class='ok'>OK</td><td>38882</td><td>500</td><td>Which MOFs have high binary gas uptake?</td></tr>
+<tr><td>6</td><td class='ok'>OK</td><td>25730</td><td>222</td><td>Which Zr-containing MOFs have carboxylate linkers?</td></tr>
+<tr><td>7</td><td class='ok'>OK</td><td>13071</td><td>254</td><td>How is pcu topology distributed across MOF source databases?</td></tr>
+<tr><td>8</td><td class='ok'>OK</td><td>5813</td><td>54</td><td>Which ZIF-8 refcodes have matching synthesis records?</td></tr>
+<tr><td>9</td><td class='ok'>OK</td><td>21592</td><td>500</td><td>Which MOFs have aqueous low-temperature synthesis routes?</td></tr>
+<tr><td>10</td><td class='ok'>OK</td><td>21572</td><td>500</td><td>Which MOFs are reported as water-stable?</td></tr>
+<tr><td>11</td><td class='ok'>OK</td><td>4970</td><td>1</td><td>How many experimental Cu-containing MOFs are recorded?</td></tr>
+<tr><td>12</td><td class='ok'>OK</td><td>4483</td><td>1</td><td>How many experimental MOFs have pcu topology?</td></tr>
+</table>
+<div class='q'><h2>1. What are the average and variance of the pore limiting diameter for UiO-66?</h2>
+<p class='ok'>PASS — 24333 ms · tools: </p>
+<pre>For **UiO-66**, average pore limiting diameter (PLD) is **3.81 Å** with variance **0.04 Å²** (n=4 PLD values).
+PLD values by source: **CSD MOF Collection**: 3.5284 Å (RUBTAK), 3.7332 Å (RUBTAK01); **CoRE MOF 2025**: 4.00843 Å (RUBTAK01), 3.95727 Å (RUBTAK03).</pre></div>
+<div class='q'><h2>2. Which MOFs have the same topology as ZIF-8?</h2>
+<p class='ok'>PASS — 21065 ms · tools: </p>
+<pre>**ZIF-8** has **sod** topology.
+Other MOFs with the same topology include:
+- **Cu · sod · ASR** — topology **sod** · CoRE MOF 2025
+- **Cu · sod · FSR** — topology **sod** · CoRE MOF 2025
+- **Cu · sod · ASR** — topology **sod** · CoRE MOF 2025
+- **Co · sod · ASR** — topology **sod** · CoRE MOF 2025
+- **Co · sod · FSR** — topology **sod** · CoRE MOF 2025
+- … and **145** more in the table.</pre></div>
+<div class='q'><h2>3. What synthesis routes are recorded for UiO-66?</h2>
+<p class='ok'>PASS — 5224 ms · tools: </p>
+<pre>**1** synthesis route(s) from **Park_Syn** / **SynMOF** for **UiO-66**:
+- **Route A** — **Ce-UiO-66-BPyDC**, solvents: N,N-dimethylformamide; aqueous, yield **38%** (Park_Syn)
+**Route A** with N,N-dimethylformamide; aqueous has the highest reported yield of **38%**.</pre></div>
+<div class='q'><h2>4. Which MOFs are reported as thermally stable?</h2>
+<p class='ok'>PASS — 30057 ms · tools: </p>
+<pre>**2,326** MOF(s) have an experimental thermal decomposition temperature above **300 °C**; top **5** by thermal stability:
+**IFAREN** has the highest thermal decomposition temperature of **654.32 °C** from DOI **10.1021/ic701573r**, recorded in **MOFSimplify Thermal Dataset**.
+- **IFAREN**: 654.32 °C (MOFSimplify Thermal Dataset) — DOI 10.1021/ic701573r
+- **EQERIC**: 639.13 °C (MOFSimplify Thermal Dataset) — DOI 10.1039/c1cc10899a
+- **IFAQUC**: 634.87 °C (MOFSimplify Thermal Dataset) — DOI 10.1021/ic701573r
+- **KIFKEQ**: 626.17 °C (MOFSimplify Thermal Dataset) — DOI 10.1039/b705028c
+- **MUMYAW**: 604.15 °C (MOFSimplify Thermal Dataset) — DOI 10.1002/ejic.201500294
+No **WS24** Burtch/acid–base stability record was found for the top thermal MOFs (IFAREN, EQERIC, IFAQUC).</pre></div>
+<div class='q'><h2>5. Which MOFs have high binary gas uptake?</h2>
+<p class='ok'>PASS — 38882 ms · tools: </p>
+<pre>The MOF with the highest binary-gas uptake has **MOFid**: `N=N.O=C1N(c2ccc(c(c2)C(C)C)C(=O)[O-])C(=O)c2c3c1ccc1c3c(cc2)c2c3c1ccc1c3c(cc2)C(=O)N(C1=O)c1ccc(c(c1)C(C)C)C(=O)[O-].[Cu][Cu].[O-]C(=O)C=CC(=O)[O-] MOFid-v1.nbo.cat0`.
+- Post-combustion (CO2N2 at 0.9 bar, 298 K (mmolg)): **7.02 mmol/g**
+- Pre-combustion (CO2H2 at 40.0 bar, 313 K (mmolg)): **10.7 mmol/g**
+Source: **ARC_MOF 2025**.
+Pore properties: **PLD** = 3.62954 Å, **LFPD** = 4.99139 Å.
+(127,137 MOFs exceed the uptake thresholds.)</pre></div>
+<div class='q'><h2>6. Which Zr-containing MOFs have carboxylate linkers?</h2>
+<p class='ok'>PASS — 25730 ms · tools: </p>
+<pre>**222** MOF(s) match the **metal / linker** chemistry filters (sample):
+By source in sample: **MOFx-DB Tobacco** (185), **QMOF_2025** (22), **CSD MOF Collection** (14), **CoRE MOF 2025** (1).
+- **WNdZr · nan · FSR** — CoRE MOF 2025
+- **BEPVAW** — CSD MOF Collection
+- **FIPBAK** — CSD MOF Collection
+- **HEWKAZ** — CSD MOF Collection
+- **IXEGIE** — CSD MOF Collection</pre></div>
+<div class='q'><h2>7. How is pcu topology distributed across MOF source databases?</h2>
+<p class='ok'>PASS — 13071 ms · tools: </p>
+<pre>**272,711** MOF(s) with **pcu** topology appear in this sample; **5** source database(s):
+- **Tobassco**: **205,361**
+- **ARC_MOF 2025**: **64,393**
+- **QMOF_2025**: **1,899**
+- **CoRE MOF 2025**: **747**
+- **CoRE MOF 2019**: **311**</pre></div>
+<div class='q'><h2>8. Which ZIF-8 refcodes have matching synthesis records?</h2>
+<p class='ok'>PASS — 5813 ms · tools: </p>
+<pre>**2,977** row(s) link **ZIF-8** to **CSD refcodes** and publications (44 distinct refcodes in sample):
+- **EWIDUK** (CoRE MOF 2025) — DOI **10.1002/cssc.201100261**
+- **FAWCEN** (CoRE MOF 2025) — DOI **10.1021/jp303907p**
+- **FAWCEN01** (CoRE MOF 2025) — DOI **10.1021/jp303907p**
+- **FAWCEN02** (CoRE MOF 2025) — DOI **10.1021/jp303907p**
+- **FAWCEN03** (CoRE MOF 2025) — DOI **10.1021/jp303907p**
+Expand the table for the full refcode list.</pre></div>
+<div class='q'><h2>9. Which MOFs have aqueous low-temperature synthesis routes?</h2>
+<p class='ok'>PASS — 21592 ms · tools: </p>
+<pre>**1,188** synthesis record(s) match **aqueous / low-temperature** filters (sample):
+- `18728 park syn mof` at **293.15** Kelvin, **Mechanochemical**; solvents: acetic acid; hydrochloric acid; water (Park_Syn)
+- `24522 park syn mof` at **293.15** Kelvin; solvents: water; dry ethyl ether (Park_Syn)
+- `29059 park syn mof` at **293.15** Kelvin; solvents: water; NaHCO3; NaNO2; concentrated hydrochloric acid; methylene chloride (Park_Syn)
+- `25938 park syn mof` at **293.15** Kelvin, **Conventional solvothermal**; solvents: NaOH; water (Park_Syn)
+- `19737 park syn mof` at **293.15** Kelvin, **Conventional solvothermal**; solvents: THF; chloroform; water; dry THF (Park_Syn)</pre></div>
+<div class='q'><h2>10. Which MOFs are reported as water-stable?</h2>
+<p class='ok'>PASS — 21572 ms · tools: </p>
+<pre>**7,222** MOF(s) carry a reported **water-stability** signal in the KG (top sample):
+- **YOYQOU** — predicted **1** (CoRE MOF 2025)
+- **YOYQOU** — predicted **1** (CoRE MOF 2025)
+- **YOYRIP** — predicted **1** (CoRE MOF 2025)
+- **YOYRIP** — predicted **1** (CoRE MOF 2025)
+- **GOQSIQ** — predicted **0.99** (CoRE MOF 2025)
+See the table for **7,222** rows.</pre></div>
+<div class='q'><h2>11. How many experimental Cu-containing MOFs are recorded?</h2>
+<p class='ok'>PASS — 4970 ms · tools: </p>
+<pre>The knowledge graph records **9,325** experimental Cu-containing MOFs.</pre></div>
+<div class='q'><h2>12. How many experimental MOFs have pcu topology?</h2>
+<p class='ok'>PASS — 4483 ms · tools: </p>
+<pre>The knowledge graph records **1,778** experimental MOFs have pcu topology.</pre></div>
+</body></html>

@@ -193,6 +193,76 @@ ORDER BY DESC(?height)
     )
 
 
+def plan_list_dabgeo_heat_supply(
+    city: str,
+    limit: Optional[int] = DEFAULT_ONLINE_LIMIT,
+) -> SparqlPlan:
+    """DABGEO building IRI + device + heat_kwh_per_m2 (atomic row pool for filter_rows)."""
+    from mini_marie.zaha.twa_city.pirmasens_operations import OEMA_PREFIX, OM_PREFIX, UBEM_PREFIX
+
+    endpoint = resolve_city(city)
+    base = f"""
+PREFIX ubem: <{UBEM_PREFIX}>
+PREFIX oema: <{OEMA_PREFIX}>
+PREFIX om: <{OM_PREFIX}>
+SELECT ?dab_building ?device ?device_type ?heat_kwh_per_m2
+WHERE {{
+  ?dab_building a oema:Building .
+  ?dab_building ubem:hasDevice ?device .
+  ?device a ?device_type .
+  ?device oema:producesEnergy ?heat .
+  ?heat om:hasValue ?val .
+  ?val om:hasNumericalValue ?heat_kwh_per_m2 .
+}}
+ORDER BY DESC(xsd:decimal(?heat_kwh_per_m2))
+"""
+    query, applied, stripped = apply_limit_clause(base, limit)
+    return SparqlPlan(
+        tool="list_dabgeo_heat_supply",
+        city=city,
+        endpoint=endpoint,
+        query=query,
+        limit_applied=applied,
+        limit_stripped=stripped,
+        args={"city": city},
+    )
+
+
+def plan_list_dabgeo_co2_savings(
+    city: str,
+    limit: Optional[int] = DEFAULT_ONLINE_LIMIT,
+) -> SparqlPlan:
+    """DABGEO building IRI + solar device + co2_savings (atomic row pool for filter_rows)."""
+    from mini_marie.zaha.twa_city.pirmasens_operations import OEMA_PREFIX, OM_PREFIX, UBEM_PREFIX
+
+    endpoint = resolve_city(city)
+    base = f"""
+PREFIX ubem: <{UBEM_PREFIX}>
+PREFIX oema: <{OEMA_PREFIX}>
+PREFIX om: <{OM_PREFIX}>
+SELECT ?dab_building ?solar_device ?co2_savings
+WHERE {{
+  ?dab_building a oema:Building .
+  ?dab_building ubem:hasDevice ?solar_device .
+  ?solar_device a ubem:RoofSolarCollectors .
+  ?solar_device ubem:producesCO2Savings ?co2_q .
+  ?co2_q om:hasValue ?val .
+  ?val om:hasNumericalValue ?co2_savings .
+}}
+ORDER BY DESC(xsd:decimal(?co2_savings))
+"""
+    query, applied, stripped = apply_limit_clause(base, limit)
+    return SparqlPlan(
+        tool="list_dabgeo_co2_savings",
+        city=city,
+        endpoint=endpoint,
+        query=query,
+        limit_applied=applied,
+        limit_stripped=stripped,
+        args={"city": city},
+    )
+
+
 PLAN_BUILDERS = {
     "list_buildings_with_height": lambda **kw: plan_list_buildings_with_height(
         kw["city"], kw.get("limit")
@@ -205,6 +275,12 @@ PLAN_BUILDERS = {
     ),
     "buildings_by_usage": lambda **kw: plan_buildings_by_usage(
         kw["city"], kw["usage_type"], kw.get("limit")
+    ),
+    "list_dabgeo_heat_supply": lambda **kw: plan_list_dabgeo_heat_supply(
+        kw["city"], kw.get("limit")
+    ),
+    "list_dabgeo_co2_savings": lambda **kw: plan_list_dabgeo_co2_savings(
+        kw["city"], kw.get("limit")
     ),
 }
 

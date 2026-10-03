@@ -1,0 +1,12 @@
+PREFIX ubem: <http://www.theworldavatar.com/kg/ontoubemmp/>
+PREFIX om: <http://www.ontology-of-units-of-measure.org/resource/om-2/>
+SELECT
+  (COUNT(?co2) AS ?measure_count)
+  (MIN(?num) AS ?min_co2_savings)
+  (MAX(?num) AS ?max_co2_savings)
+  (AVG(?num) AS ?avg_co2_savings)
+WHERE {
+  ?co2 a ubem:AnnualCO2Savings .
+  ?co2 om:hasValue ?val .
+  ?val om:hasNumericalValue ?num .
+}

@@ -19,8 +19,17 @@ from mini_marie.mop_mof.mops.workflow_mcp import (
     replay_workflow_offline,
     run_workflow_online,
 )
+from mini_marie.mop_mof.mops.remote_mcp import (
+    get_assembly_models_by_polyhedral_shape,
+    get_mop_blazegraph_endpoint_status,
+    get_mop_corpus_statistics,
+    get_mop_provenance_by_formula,
+    get_mops_by_cbu_formula,
+    get_mops_by_outer_diameter_min,
+    lookup_remote_mop_by_label,
+    ontomops_data_routing_note,
+)
 from mini_marie.mop_mof.mops.twa_operations import (
-    lookup_synthesis_iri,
     lookup_mop_iri,
     lookup_by_ccdc,
     get_all_mops,
@@ -228,6 +237,15 @@ def instruction_prompt():
         "**Characterisation extras (OntoSpecies):**\n"
         "40. get_hnmr_for_synthesis - HNMR shifts/solvent/temperature for a synthesis output\n"
         "41. get_common_hnmr_solvents - Most common HNMR solvents across corpus\n\n"
+        "**Remote OntoMOPs Blazegraph (full polyhedra corpus, ontomops_ogm):**\n"
+        "42. get_mop_blazegraph_endpoint_status - Probe/cache working Blazegraph endpoint\n"
+        "43. get_mop_corpus_statistics - Remote MOP/CBU/CCDC counts\n"
+        "44. get_mops_by_outer_diameter_min - Filter by outer diameter (Angstrom)\n"
+        "45. get_mops_by_cbu_formula - MOPs + inner sphere diameters for a CBU formula\n"
+        "46. get_assembly_models_by_polyhedral_shape - Assembly models by shape symbol\n"
+        "47. lookup_remote_mop_by_label - Search full remote MOP corpus by label\n"
+        "48. get_mop_provenance_by_formula - Provenance/DOI for MOP formula\n"
+        "49. ontomops_data_routing_note - Which backend to use (remote vs local vs MOF)\n\n"
         "**Query Logic:**\n"
         "The TWA follows: Synthesis → Chemical Output → MOP\n"
         "Always start from synthesis when looking for relationships.\n\n"
@@ -701,6 +719,71 @@ async def get_common_chemicals_tool(limit: int = 20) -> str:
     """Get most commonly used chemicals across all syntheses."""
     results = get_common_chemicals(limit=limit)
     return format_results_as_tsv(results)
+
+
+# ============================================================================
+# Remote OntoMOPs Blazegraph (ontomops_ogm)
+# ============================================================================
+
+@mops_twa_tool_logger
+@mcp.tool(name="get_mop_blazegraph_endpoint_status", description="Probe/cache OntoMOPs Blazegraph endpoints")
+async def get_mop_blazegraph_endpoint_status_tool(force_probe: bool = False) -> str:
+    return get_mop_blazegraph_endpoint_status(force_probe=force_probe)
+
+
+@mops_twa_tool_logger
+@mcp.tool(name="get_mop_corpus_statistics", description="Remote MOP/CBU/CCDC counts from Blazegraph ontomops_ogm")
+async def get_mop_corpus_statistics_tool(force_probe: bool = False) -> str:
+    return get_mop_corpus_statistics(force_probe=force_probe)
+
+
+@mops_twa_tool_logger
+@mcp.tool(
+    name="get_mops_by_outer_diameter_min",
+    description="Remote: MOPs with outer diameter greater than min_angstrom (Marie MQ49)",
+)
+async def get_mops_by_outer_diameter_min_tool(min_angstrom: float, limit: int = 10, force_probe: bool = False) -> str:
+    return get_mops_by_outer_diameter_min(min_angstrom, limit=limit, force_probe=force_probe)
+
+
+@mops_twa_tool_logger
+@mcp.tool(
+    name="get_mops_by_cbu_formula",
+    description="Remote: MOPs using an exact CBU formula with inner sphere diameters (Marie MQ50)",
+)
+async def get_mops_by_cbu_formula_tool(cbu_formula: str, limit: int = 10, force_probe: bool = False) -> str:
+    return get_mops_by_cbu_formula(cbu_formula, limit=limit, force_probe=force_probe)
+
+
+@mops_twa_tool_logger
+@mcp.tool(
+    name="get_assembly_models_by_polyhedral_shape",
+    description="Remote: assembly models matching a polyhedral shape symbol (Marie MQ54)",
+)
+async def get_assembly_models_by_polyhedral_shape_tool(
+    shape_symbol: str,
+    limit: int = 10,
+    force_probe: bool = False,
+) -> str:
+    return get_assembly_models_by_polyhedral_shape(shape_symbol, limit=limit, force_probe=force_probe)
+
+
+@mops_twa_tool_logger
+@mcp.tool(name="lookup_remote_mop_by_label", description="Remote: fuzzy label search in full MOP corpus")
+async def lookup_remote_mop_by_label_tool(name: str, limit: int = 5, force_probe: bool = False) -> str:
+    return lookup_remote_mop_by_label(name, limit=limit, force_probe=force_probe)
+
+
+@mops_twa_tool_logger
+@mcp.tool(name="get_mop_provenance_by_formula", description="Remote: provenance/DOI for MOPs matching a formula")
+async def get_mop_provenance_by_formula_tool(mop_formula: str, limit: int = 10, force_probe: bool = False) -> str:
+    return get_mop_provenance_by_formula(mop_formula, limit=limit, force_probe=force_probe)
+
+
+@mops_twa_tool_logger
+@mcp.tool(name="ontomops_data_routing_note", description="Explain remote Blazegraph vs local synthesis TWA vs MOF corpus")
+async def ontomops_data_routing_note_tool() -> str:
+    return ontomops_data_routing_note()
 
 
 @mops_twa_tool_logger

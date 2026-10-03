@@ -53,7 +53,7 @@ def comprehensive_warm_specs() -> List[Dict[str, Any]]:
 
     for name in MOF_NAMES:
         add("get_pld_stats_by_mof_name", {"mof_name": name})
-        add("get_synthesis_by_mof_name", {"mof_name": name})
+        add("get_synthesis_by_mof_name", {"mof_name": name, "synthesis_only": True})
         add("get_mof_identity_by_name", {"mof_name": name})
         add("get_linkers_by_mof_name", {"mof_name": name})
         add("get_publications_by_mof_name", {"mof_name": name})
@@ -78,7 +78,8 @@ def comprehensive_warm_specs() -> List[Dict[str, Any]]:
     add("get_mofs_by_metal_and_linker", {})
     add("get_aqueous_low_temp_syntheses", {})
     add("get_water_stable_mofs", {})
-    add("get_thermal_stable_mofs", {})
+    add("get_thermal_stable_mofs", {"min_thermal": 300})
+    add("count_thermal_stable_mofs", {"min_thermal": 300})
     add("get_high_binary_gas_uptake_mofs", {})
     add("get_nist_exp_adsorption_rows", {})
     add("get_core_name_chemistry_rows", {})

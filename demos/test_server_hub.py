@@ -14,8 +14,11 @@ def test_marie_classic_committed():
 
 
 def test_hub_routes():
+    import os
+
     from demos.server import app
 
+    os.environ["ELISA_FRONTEND_URL"] = "https://qa.theworldavatar.io"
     client = app.test_client()
     for path in ("/", "/demos/", "/demos/hub/"):
         resp = client.get(path)
@@ -27,8 +30,15 @@ def test_hub_routes():
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert "Marie" in body and "Zaha" in body and "Elisa" in body
-    assert "https://qa.theworldavatar.io/" in body
-    assert 'href="/demos/elisa/' not in body
+    assert "The World Avatar output agents" in body
+    assert "/demos/hub/portraits/elisa.png" in body
+    assert 'href="https://qa.theworldavatar.io/"' in body
+    assert "advanced UI" not in body
+    assert "RAG" not in body
+
+    resp = client.get("/demos/elisa/")
+    assert resp.status_code == 302
+    assert resp.headers.get("Location", "").startswith("https://qa.theworldavatar.io")
 
     resp = client.get("/demos/marie-classic/")
     assert resp.status_code == 200
