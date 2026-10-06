@@ -687,8 +687,9 @@ def _data_preview_for_llm(data: List[Dict[str, Any]], *, max_rows: int = 10) -> 
     lines: List[str] = []
     for item in data:
         if item.get("type") == "table":
-            vars_ = item.get("vars") or []
-            for row in (item.get("bindings") or [])[:max_rows]:
+            vars_ = item.get("vars") or item.get("columns") or []
+            rows = item.get("bindings") or item.get("data") or []
+            for row in rows[:max_rows]:
                 preview = ", ".join(f"{k}: {v}" for k, v in row.items() if v not in (None, ""))
                 if preview:
                     lines.append(f"- {preview}")
@@ -760,9 +761,18 @@ Write a clear natural-language Markdown response (2–6 sentences or short bulle
     return rule_text
 
 
-async def kgqa_result_to_twa_display(kgqa: Dict[str, Any]) -> Dict[str, Any]:
+async def kgqa_result_to_twa_display(
+    kgqa: Dict[str, Any],
+    *,
+    web: Optional[Any] = None,
+) -> Dict[str, Any]:
     """Convert orchestrator output to {metadata, data, narrative} for POST /qa/."""
-    from demos.twa_adapter import _steps_from_metadata
+    from demos.hybrid_interpretation import (
+        show_web_sources_table,
+        synthesize_marie_dual_source,
+        web_sources_table,
+    )
+    from demos.twa_adapter import _display_answer, _steps_from_metadata
 
     question = kgqa.get("question") or ""
     timing = kgqa.get("timing") or {}
@@ -770,10 +780,50 @@ async def kgqa_result_to_twa_display(kgqa: Dict[str, Any]) -> Dict[str, Any]:
     online_ms = int(timing.get("online_ms") or timing.get("total_ms") or 0)
 
     data = build_twa_data(kgqa)
-    narrative = await build_twa_narrative_llm(question, kgqa, data)
+    if web is not None and show_web_sources_table():
+        web_table = web_sources_table(web)
+        if web_table:
+            data.append(web_table)
+
+    tool_activity = metadata.get("tool_activity") or {}
+    tool_outputs = list(tool_activity.get("tool_outputs") or [])
+
+    if web is not None:
+        narrative = await synthesize_marie_dual_source(
+            question,
+            kgqa=kgqa,
+            marie_data=data,
+            display_answer=_display_answer(kgqa),
+            tool_outputs=tool_outputs,
+            web=web,
+        )
+    else:
+        narrative = await build_twa_narrative_llm(question, kgqa, data)
+
+    steps = _steps_from_metadata(question, metadata, online_ms)
+    if web is not None:
+        steps = list(steps) + [
+            {
+                "action": "web_search",
+                "arguments": question[:200],
+                "results": (web.summary or web.error or "")[:2000],
+                "latency": web.elapsed_ms,
+            }
+        ]
+
+    out_meta: Dict[str, Any] = {"steps": steps}
+    if web is not None:
+        out_meta["dual_source"] = True
+        out_meta["web_search"] = {
+            "backend": web.backend,
+            "model": web.model,
+            "elapsed_ms": web.elapsed_ms,
+            "source_count": len(web.sources or []),
+            "error": web.error,
+        }
 
     return {
-        "metadata": {"steps": _steps_from_metadata(question, metadata, online_ms)},
+        "metadata": out_meta,
         "data": data,
         "narrative": narrative,
     }

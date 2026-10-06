@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -1337,8 +1338,14 @@ def _kg_enrich_marie_table_identities(data: List[Dict[str, Any]]) -> List[Dict[s
     return out
 
 
-def kgqa_result_to_marie(kgqa: Dict[str, Any]) -> Dict[str, Any]:
+def kgqa_result_to_marie(
+    kgqa: Dict[str, Any],
+    *,
+    web: Optional[Any] = None,
+) -> Dict[str, Any]:
     """Convert orchestrator output to Marie chemistry demo POST /api/qa/ shape."""
+    from demos.hybrid_interpretation import show_web_sources_table, web_sources_table
+
     question = kgqa.get("question") or ""
     metadata = kgqa.get("metadata") or {}
     tool_activity = metadata.get("tool_activity") or {}
@@ -1389,6 +1396,11 @@ def kgqa_result_to_marie(kgqa: Dict[str, Any]) -> Dict[str, Any]:
 
     marie_data = enrich_marie_tables(marie_data, question=question)
 
+    if web is not None and show_web_sources_table():
+        web_table = web_sources_table(web)
+        if web_table:
+            marie_data.append(web_table)
+
     narrative = build_marie_narrative(
         question,
         online_answer=display_answer,
@@ -1396,12 +1408,46 @@ def kgqa_result_to_marie(kgqa: Dict[str, Any]) -> Dict[str, Any]:
         data=marie_data,
     )
 
+    metadata = build_marie_metadata(question, kgqa, tool_outputs)
+    if web is not None:
+        metadata["dual_source"] = True
+        metadata["web_search"] = {
+            "backend": web.backend,
+            "model": web.model,
+            "elapsed_ms": web.elapsed_ms,
+            "source_count": len(web.sources or []),
+            "error": web.error,
+            "summary_preview": (web.summary or "")[:500],
+        }
+
     payload = {
-        "metadata": build_marie_metadata(question, kgqa, tool_outputs),
+        "metadata": metadata,
         "visualisation": {},
         "data": marie_data,
         "_narrative": narrative,
+        "_display_answer": display_answer,
+        "_tool_outputs": tool_outputs,
     }
+    return payload
+
+
+async def _finalize_marie_payload(payload: Dict[str, Any], kgqa: Dict[str, Any], web: Optional[Any]) -> Dict[str, Any]:
+    from demos.hybrid_interpretation import synthesize_marie_dual_source
+
+    question = kgqa.get("question") or ""
+    display_answer = payload.pop("_display_answer", None)
+    tool_outputs = payload.pop("_tool_outputs", []) or []
+    marie_data = payload.get("data") or []
+    payload["_narrative"] = await synthesize_marie_dual_source(
+        question,
+        kgqa=kgqa,
+        marie_data=marie_data,
+        display_answer=display_answer,
+        tool_outputs=tool_outputs,
+        web=web,
+    )
+    payload.pop("_display_answer", None)
+    payload.pop("_tool_outputs", None)
     return payload
 
 
@@ -1504,6 +1550,37 @@ async def _execute_kgqa(
     }
 
 
+async def _run_kgqa_dual(
+    question: str,
+    *,
+    qa_domain: Optional[str] = None,
+    model_name: str = "gpt-4o",
+    recursion_limit: int = 120,
+) -> Tuple[Dict[str, Any], Optional[Any]]:
+    """KGQA and optional web search in parallel."""
+    from mini_marie.web_search import marie_web_search_enabled, run_web_search
+
+    if marie_web_search_enabled():
+        kgqa_task = asyncio.create_task(
+            _run_kgqa_core(
+                question,
+                qa_domain=qa_domain,
+                model_name=model_name,
+                recursion_limit=recursion_limit,
+            )
+        )
+        web_task = asyncio.create_task(run_web_search(question))
+        kgqa, web = await asyncio.gather(kgqa_task, web_task)
+        return kgqa, web
+    kgqa = await _run_kgqa_core(
+        question,
+        qa_domain=qa_domain,
+        model_name=model_name,
+        recursion_limit=recursion_limit,
+    )
+    return kgqa, None
+
+
 async def _run_kgqa_core(
     question: str,
     *,
@@ -1540,13 +1617,16 @@ async def run_twa_qa(
     recursion_limit: int = 120,
 ) -> Dict[str, Any]:
     """Execute KGQA and return TWA-compatible QA payload."""
-    kgqa = await _run_kgqa_core(
+    kgqa, web = await _run_kgqa_dual(
         question,
         qa_domain=qa_domain,
         model_name=model_name,
         recursion_limit=recursion_limit,
     )
-    return await kgqa_result_to_twa_display(kgqa)
+    if web is not None:
+        kgqa["web_search_result"] = web.to_dict()
+    display = await kgqa_result_to_twa_display(kgqa, web=web)
+    return display
 
 
 async def run_marie_qa(
@@ -1557,13 +1637,14 @@ async def run_marie_qa(
     recursion_limit: int = 120,
 ) -> Dict[str, Any]:
     """Execute KGQA and return Marie demo POST /api/qa/ payload."""
-    kgqa = await _run_kgqa_core(
+    kgqa, web = await _run_kgqa_dual(
         question,
         qa_domain=qa_domain or "marie",
         model_name=model_name,
         recursion_limit=recursion_limit,
     )
-    payload = kgqa_result_to_marie(kgqa)
+    payload = kgqa_result_to_marie(kgqa, web=web)
+    payload = await _finalize_marie_payload(payload, kgqa, web)
     narrative = payload.pop("_narrative", "")
     request_id = str(uuid.uuid4())
     _MARIE_SESSIONS[request_id] = {
