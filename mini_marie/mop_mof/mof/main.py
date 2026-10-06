@@ -8,6 +8,7 @@ Query limits are hardcoded in mof_operations.py.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import sys
 from functools import wraps
@@ -26,6 +27,12 @@ from mini_marie.mop_mof.mof.competency_workflow_mcp import (
     run_competency_online as run_mof_competency_online,
 )
 from mini_marie.mop_mof.mof import mof_competency_operations as competency
+from mini_marie.mop_mof.mof.mof_identity_enrichment import (
+    enrich_mof_rows,
+    lookup_mof_identity_by_entries,
+    parse_entries_json,
+    parse_rows_json,
+)
 from mini_marie.mop_mof.mof.mof_operations import (
     format_results_as_tsv,
     get_large_pore_co2_candidates,
@@ -123,7 +130,12 @@ def instruction_prompt():
         "27. get_mofs_by_metal_and_linker / get_mofs_by_topology_all_sources\n"
         "28. get_refcodes_by_mof_name / get_water_stable_mofs / get_thermal_stable_mofs\n"
         "29. get_aqueous_low_temp_syntheses / get_high_binary_gas_uptake_mofs\n\n"
+        "**Identity enrichment (use on any MOF table with opaque `mof` ids):**\n"
+        "30. lookup_mof_identity_by_entries - batch resolve name, refcode, MOFid, topology\n"
+        "31. enrich_mof_table_rows - merge identity onto JSON result rows from any prior tool\n\n"
         "**Notes:**\n"
+        "- After competency or atomic tools return rows with only `mof`/`source`, call "
+        "`enrich_mof_table_rows` before summarizing so answers use names and refcodes.\n"
         "- Result row limits are hardcoded (typically 10 rows).\n"
         "- CO2 uptake max of 363 mmol/g is often a model cap; prefer tools 6 or 7 for ranking.\n"
         "- PLD/LCD of -1 means missing pore geometry.\n"
@@ -456,7 +468,7 @@ async def get_water_stable_mofs_tool() -> str:
 
 @mof_twa_tool_logger
 @mcp.tool(name="get_thermal_stable_mofs", description="MOFs with experimental thermal stability above min_thermal")
-async def get_thermal_stable_mofs_tool(min_thermal: float = 400) -> str:
+async def get_thermal_stable_mofs_tool(min_thermal: float = 300) -> str:
     return _competency_tsv(
         competency.get_thermal_stable_mofs(min_thermal=min_thermal, limit=MCP_ONLINE_LIMIT),
         f"No MOFs with thermal stability > {min_thermal}",
@@ -552,6 +564,47 @@ async def run_competency_online_tool(
     if online_limit > 20:
         online_limit = MCP_ONLINE_LIMIT
     return run_mof_competency_online(workflow_id, online_limit=online_limit)
+
+
+@mof_twa_tool_logger
+@mcp.tool(
+    name="lookup_mof_identity_by_entries",
+    description=(
+        "Batch-resolve MOF identity fields (hasNames, CSD refcode, MOFid, source, topology) "
+        "for a JSON array of MOF entry IRIs or internal mof_* tokens. Use after any tool that "
+        "returns opaque mof ids."
+    ),
+)
+async def lookup_mof_identity_by_entries_tool(mof_entries_json: str) -> str:
+    try:
+        entries = parse_entries_json(mof_entries_json)
+        rows = lookup_mof_identity_by_entries(entries)
+    except (ValueError, json.JSONDecodeError) as exc:
+        return f"Error: {exc}"
+    return _tsv_or_message(rows, "No identity rows returned for the given entries")
+
+
+@mof_twa_tool_logger
+@mcp.tool(
+    name="enrich_mof_table_rows",
+    description=(
+        "Merge identity onto competency/atomic result rows. Pass rows_json as a JSON array of "
+        "objects (e.g. from sample_results TSV parsed to dicts). Adds/fills name, refcode, "
+        "mofid, sourcedb, topology when missing. Call this before narrating peer lists, "
+        "topology tables, or any MOF listing."
+    ),
+)
+async def enrich_mof_table_rows_tool(rows_json: str) -> str:
+    import json as _json
+
+    try:
+        rows = parse_rows_json(rows_json)
+        from mini_marie.mop_mof.mof.competency_cache import CompetencyCache
+
+        enriched = enrich_mof_rows(rows, cache=CompetencyCache(), allow_remote=True)
+    except (ValueError, _json.JSONDecodeError) as exc:
+        return f"Error: {exc}"
+    return _tsv_or_message(enriched, "No rows to enrich")
 
 
 @mof_twa_tool_logger

@@ -29,15 +29,21 @@ PROPERTY_LIMIT = 30
 CITY_ENDPOINTS = {
     "bremen": "https://bremen.cmpg.io/ontop/sparql/",
     "kaiserslautern": "https://kaiserslautern.cmpg.io/ontop/sparql/",
+    "pirmasens": "https://pirmasens.cmpg.io/ontop/sparql/",
 }
+
+PIRMASENS_QUERIES_DIR = QUERIES_DIR / "pirmasens"
 
 DEFAULT_ENDPOINT_CANDIDATES: List[str] = list(CITY_ENDPOINTS.values())
 
 STACK_INTERNAL_HINTS = {
     "kaiserslautern_postgis": "kaiserslautern-postgis:5432",
     "bremen_postgis": "bremen-stack-postgis:5432",
+    "pirmasens_postgis": "pirmasens-postgis:5432",
     "kaiserslautern_adminer": "https://kaiserslautern.cmpg.io/adminer/ui/?pgsql=kaiserslautern-postgis%3A5432",
     "bremen_adminer": "https://bremen.cmpg.io/adminer/ui/?pgsql=bremen-stack-postgis%3A5432&username=postgres",
+    "pirmasens_adminer": "https://pirmasens.cmpg.io/adminer/ui/?pgsql=pirmasens-postgis%3A5432&username=postgres",
+    "pirmasens_visualization": "https://pirmasens.cmpg.io/visualisation/de/map",
 }
 
 
@@ -81,8 +87,30 @@ def load_query(name: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def run_query_file(name: str, endpoint: str, **kwargs: Any) -> List[Dict[str, Any]]:
-    return execute_sparql(load_query(name), endpoint=endpoint, **kwargs)
+def normalize_city_key(city: str) -> str:
+    """Return canonical city key (bremen, kaiserslautern, pirmasens)."""
+    key = city.strip().lower().replace(" ", "_").replace("-", "_")
+    aliases = {
+        "kl": "kaiserslautern",
+        "kaiserslautern": "kaiserslautern",
+        "bremen": "bremen",
+        "pirmasens": "pirmasens",
+    }
+    return aliases.get(key, key)
+
+
+def load_city_query(city: str, name: str) -> str:
+    """Load a city-specific query file when present, else the shared query."""
+    city_key = normalize_city_key(city)
+    city_path = PIRMASENS_QUERIES_DIR / name if city_key == "pirmasens" else QUERIES_DIR / city_key / name
+    if city_path.exists():
+        return city_path.read_text(encoding="utf-8")
+    return load_query(name)
+
+
+def run_query_file(name: str, endpoint: str, city: str = "", **kwargs: Any) -> List[Dict[str, Any]]:
+    query = load_city_query(city, name) if city else load_query(name)
+    return execute_sparql(query, endpoint=endpoint, **kwargs)
 
 
 def format_results_as_tsv(results: List[Dict[str, Any]]) -> str:
@@ -193,13 +221,7 @@ def run_deep_discovery(endpoint: str) -> Dict[str, Any]:
 
 def resolve_city(city: str) -> str:
     """Map city name to SPARQL endpoint URL."""
-    key = city.strip().lower().replace(" ", "_").replace("-", "_")
-    aliases = {
-        "kl": "kaiserslautern",
-        "kaiserslautern": "kaiserslautern",
-        "bremen": "bremen",
-    }
-    key = aliases.get(key, key)
+    key = normalize_city_key(city)
     if key not in CITY_ENDPOINTS:
         allowed = ", ".join(sorted(CITY_ENDPOINTS))
         raise ValueError(f"Unknown city {city!r}. Use one of: {allowed}")
@@ -220,22 +242,30 @@ def _usage_type_iri(usage_type: str) -> str:
 
 def get_building_count(city: str) -> List[Dict[str, Any]]:
     """Count citygml:Building instances."""
-    return run_query_file("01b_building_count.sparql", resolve_city(city))
+    return run_query_file("01b_building_count.sparql", resolve_city(city), city=city)
 
 
 def get_property_coverage(city: str) -> List[Dict[str, Any]]:
     """Per-metric counts of buildings with height, address, usage, etc."""
-    return run_query_file("15_property_coverage.sparql", resolve_city(city))
+    if normalize_city_key(city) == "pirmasens":
+        from mini_marie.zaha.twa_city.pirmasens_operations import get_pirmasens_property_coverage
+
+        return get_pirmasens_property_coverage(city)
+    return run_query_file("15_property_coverage.sparql", resolve_city(city), city=city)
 
 
 def get_usage_type_counts(city: str) -> List[Dict[str, Any]]:
-    """Building counts grouped by ontobuiltenv usage type."""
-    return run_query_file("14_usage_type_counts.sparql", resolve_city(city))
+    """Building counts grouped by usage type."""
+    if normalize_city_key(city) == "pirmasens":
+        from mini_marie.zaha.twa_city.pirmasens_operations import get_pirmasens_usage_type_counts
+
+        return get_pirmasens_usage_type_counts(city)
+    return run_query_file("14_usage_type_counts.sparql", resolve_city(city), city=city)
 
 
 def get_height_stats(city: str) -> List[Dict[str, Any]]:
     """Min, max, avg measuredHeight for buildings that have height."""
-    return run_query_file("12_height_stats.sparql", resolve_city(city))
+    return run_query_file("12_height_stats.sparql", resolve_city(city), city=city)
 
 
 def get_top_buildings_by_height(city: str) -> List[Dict[str, Any]]:
@@ -262,8 +292,28 @@ LIMIT {RESULT_LIMIT}
 
 
 def get_buildings_by_usage(city: str, usage_type: str) -> List[Dict[str, Any]]:
-    """Top buildings with a given ontobuiltenv usage type (e.g. Domestic, Office)."""
+    """Top buildings with a given usage type (e.g. Domestic, Office)."""
     endpoint = resolve_city(city)
+    usage_local = usage_type.strip().rsplit("/", 1)[-1]
+    usage_pattern = _escape_literal(usage_local)
+    if normalize_city_key(city) == "pirmasens":
+        query = f"""
+PREFIX bldg: <http://www.opengis.net/citygml/building/2.0/>
+PREFIX be: <{ONTOBUILTENV_PREFIX}>
+SELECT ?building ?height ?storeys ?usage_type ?label
+WHERE {{
+  ?building a bldg:Building ;
+            bldg:measuredHeight ?height ;
+            be:hasPropertyUsage ?u .
+  ?u a ?usage_type .
+  OPTIONAL {{ ?building bldg:storeysAboveGround ?storeys }}
+  OPTIONAL {{ ?building <http://www.w3.org/2000/01/rdf-schema#label> ?label }}
+  FILTER(CONTAINS(LCASE(STR(?usage_type)), LCASE("{usage_pattern}")))
+}}
+ORDER BY DESC(?height)
+LIMIT {RESULT_LIMIT}
+"""
+        return execute_sparql(query, endpoint)
     usage_iri = _escape_literal(_usage_type_iri(usage_type))
     query = f"""
 PREFIX bldg: <http://www.opengis.net/citygml/building/2.0/>

@@ -117,6 +117,8 @@ Environment:
 | `DEMO_PORT` | `8080` | Port |
 | `DEMO_LLM_MODEL` | `gpt-4o` | Model for KGQA agent |
 | `DEMO_AUTO_OFFLINE` | `true` | After online probe, replay full cache from `recording_path` |
+| `DEMO_FORCE_REFRESH` | `false` | When `true`, bypass SQLite on online steps (cold SPARQL); keep `false` for full cache |
+| `MARIE_WEB_SEARCH` | `1` | Parallel web search + KG; merged narrative via LLM (`mini_marie/web_search/README.md`) |
 
 ## Pointing an external frontend at our backend
 

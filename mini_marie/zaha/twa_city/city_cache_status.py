@@ -111,9 +111,10 @@ def print_status(*, city_filter: str | None = None) -> None:
         conn.close()
 
     print("\nChunked warm examples:")
+    print("  python -m mini_marie.zaha.twa_city.warm_city_cache --page-questions")
     print("  python -m mini_marie.zaha.twa_city.warm_city_cache --city bremen --atomics-only")
-    print("  python -m mini_marie.zaha.twa_city.warm_city_cache --city bremen --locations-only --missing-only")
-    print("  python -m mini_marie.zaha.twa_city.warm_city_cache --city kaiserslautern --comprehensive")
+    print("  python -m mini_marie.zaha.twa_city.warm_city_cache --city pirmasens --atomics-only --include-ubem")
+    print("  python -m mini_marie.zaha.twa_city.warm_city_cache --comprehensive --missing-only")
 
 
 def main() -> None:

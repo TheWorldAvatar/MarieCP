@@ -67,13 +67,10 @@ def load_twa_graph(data_path: str) -> Graph:
     return graph
 
 def ensure_twa_loaded() -> Graph:
-    """Ensure TWA is loaded (lazy loading)."""
-    global _twa_graph  # pylint: disable=global-statement
-    if _twa_graph is None:
-        data_path = merged_tll_dir()
-        logger.info(f"Loading TWA from: {data_path}")
-        _twa_graph = load_twa_graph(str(data_path))
-    return _twa_graph
+    """Deprecated: local merged TTL is no longer loaded."""
+    raise RuntimeError(
+        "Local merged TTL is disabled. MOP queries use remote Blazegraph via execute_sparql()."
+    )
 
 
 def _cache_dir() -> Path:
@@ -109,12 +106,8 @@ def _latest_mtime_in_dir(p: Path) -> float:
 
 def _build_label_index() -> Dict[str, Any]:
     """
-    Build a local label index from the in-memory TWA graph.
-    This runs full list queries once (no LIMIT), then persists to disk.
+    Build a label index from remote Blazegraph (full list queries, persisted to disk).
     """
-    twa_graph = ensure_twa_loaded()
-
-    # Full lists (no LIMIT)
     synth_q = """
     PREFIX ontosyn: <https://www.theworldavatar.com/kg/OntoSyn/>
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -143,7 +136,6 @@ def _build_label_index() -> Dict[str, Any]:
     } ORDER BY ?label
     """
 
-    # IR materials list (full, no LIMIT)
     ir_mat_q = """
     PREFIX ontospecies: <http://www.theworldavatar.com/ontology/ontospecies/OntoSpecies.owl#>
     SELECT DISTINCT ?materialName WHERE {
@@ -157,49 +149,22 @@ def _build_label_index() -> Dict[str, Any]:
 
     def _labels(query: str) -> List[str]:
         out: List[str] = []
-        for row in twa_graph.query(query):
-            try:
-                v = str(row["label"]) if "label" in row.labels else str(row[0])
-            except Exception:
-                v = str(row[0]) if row else ""
-            v = (v or "").strip()
-            if v:
+        for row in execute_sparql(query):
+            v = str(row.get("label") or row.get("materialName") or "").strip()
+            if v and v not in out:
                 out.append(v)
-        # de-dupe preserve order
-        seen: set[str] = set()
-        dedup: List[str] = []
-        for s in out:
-            if s not in seen:
-                seen.add(s)
-                dedup.append(s)
-        return dedup
-
-    def _strings(query: str, var: str) -> List[str]:
-        out: List[str] = []
-        for row in twa_graph.query(query):
-            v = str(getattr(row, var)) if getattr(row, var, None) is not None else None
-            if v:
-                v = v.strip()
-                if v:
-                    out.append(v)
-        seen: set[str] = set()
-        dedup: List[str] = []
-        for s in out:
-            if s not in seen:
-                seen.add(s)
-                dedup.append(s)
-        return dedup
+        return out
 
     syntheses = _labels(synth_q)
     mops = _labels(mop_q)
     chemicals = _labels(chem_q)
-    ir_materials = _strings(ir_mat_q, "materialName")
+    ir_materials = _labels(ir_mat_q)
 
     idx = {
         "meta": {
             "built_at_unix": time.time(),
-            "source_merged_ttl_latest_mtime": _latest_mtime_in_dir(_merged_ttl_dir()),
-            "triples": len(twa_graph),
+            "source": "remote_blazegraph",
+            "triples": None,
         },
         "syntheses": syntheses,
         "mops": mops,
@@ -229,12 +194,10 @@ def warm_label_index(force: bool = False) -> Dict[str, Any]:
         if not force and cache_file.exists():
             try:
                 data = json.loads(cache_file.read_text(encoding="utf-8"))
-                cached_mtime = float((data.get("meta") or {}).get("source_merged_ttl_latest_mtime") or 0.0)
-                if cached_mtime >= source_mtime and data.get("syntheses") and data.get("mops"):
+                if data.get("syntheses") and data.get("mops"):
                     _label_index = data
                     return _label_index
             except Exception:
-                # fall through to rebuild
                 pass
 
         # Rebuild
@@ -291,33 +254,13 @@ def fuzzy_lookup_ir_material(query: str, limit: int = 10, cutoff: float = 0.6) -
 
 def execute_sparql(query: str) -> List[Dict[str, Any]]:
     """
-    Execute a SPARQL query and return results as list of dictionaries.
-    
-    Args:
-        query: SPARQL query string
-        
-    Returns:
-        List of dictionaries with query results
-        
-    Example:
-        >>> query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 5"
-        >>> results = execute_sparql(query)
-        >>> print(results)
+    Execute SPARQL against the remote OntoMOPs Blazegraph (ontomops_ogm).
+
+    Local merged TTL is no longer used; all MOP/OntoSyn queries target remote SPARQL.
     """
-    twa_graph = ensure_twa_loaded()
-    
-    results = []
-    for row in twa_graph.query(query):
-        result_dict = {}
-        for var in row.labels:
-            value = row[var]
-            if value is not None:
-                result_dict[var] = str(value)
-            else:
-                result_dict[var] = None
-        results.append(result_dict)
-    
-    return results
+    from mini_marie.mop_mof.mops.ontomop_operations import execute_remote_sparql
+
+    return execute_remote_sparql(query)
 
 def format_results_as_tsv(results: List[Dict[str, Any]]) -> str:
     """

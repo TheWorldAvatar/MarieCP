@@ -8,7 +8,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description"
         content="Marie — natural-language search over chemistry and related knowledge graphs in The World Avatar." />
-    <link rel="icon" type="image/png" href="/demos/zaha/static/img/favicon.png" />
+    <link rel="icon" type="image/png" href="/demos/hub/favicon.png" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css"
         integrity="sha384-xOolHFLEh07PJGoPkLv1IbcEPTNtaed2xpHsD9ESMhqIYd0nLMwNLD69Npy4HI+N" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap4.min.css" />
@@ -83,12 +83,13 @@
                     <div class="row">
                         <div id="qa-data-container" class="col-md-7">
                         </div>
-                        <div class="col-md-5">
+                        <div class="col-md-5 insight-column">
+                            <div id="qa-insight-container"></div>
                             <div class="card" id="chatbot-response-card" style="display: none">
                                 <div class="card-body">
                                     <h5 class="card-title">Marie's response</h5>
                                     <div>
-                                        <p id="chatbot-response" style="display: inline-block; margin: 0;"></p>
+                                        <div id="chatbot-response" class="chatbot-markdown" style="display: inline-block; margin: 0;"></div>
                                         <span class="spinner-grow spinner-grow-sm text-primary" role="status"
                                             id="chatbot-spinner">
                                             <span class="sr-only">Loading...</span>
@@ -245,84 +246,29 @@
                     </ul>
                 </div>
 
-                <button type="submit" class="accordion">MOF competency questions</button>
+                <button type="submit" class="accordion">MOF competency questions (12)</button>
                 <div class="accordion-panel">
+                    <p>Canonical demo set aligned with <code>competency_suite.json</code> workflows (PDF + David SPARQL stories).</p>
                     <ul>
                         <li class="sample-question"
                             onclick="inputField.populateInputText(&quot;What are the average and variance of the pore limiting diameter for UiO-66?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
                             What are the average and variance of the pore limiting diameter for UiO-66?
                         </li>
                         <li class="sample-question"
-                            onclick="inputField.populateInputText(&quot;Which Zn-containing MOFs are available, grouped by source database?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
-                            Which Zn-containing MOFs are available, grouped by source database?
-                        </li>
-                        <li class="sample-question"
-                            onclick="inputField.populateInputText(&quot;Which Zn-containing MOFs come from CoRE databases, and how do their source statistics compare with all Zn MOFs?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
-                            Which Zn-containing MOFs come from CoRE databases, and how do their source statistics compare with all Zn MOFs?
-                        </li>
-                        <li class="sample-question"
-                            onclick="inputField.populateInputText(&quot;Among Zn-containing MOFs from CoRE databases, how many come from each source database, and how does that compare with the total MOF count?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
-                            Among Zn-containing MOFs from CoRE databases, how many come from each source database, and how does that compare with the total MOF count?
-                        </li>
-                        <li class="sample-question"
-                            onclick="inputField.populateInputText(&quot;How many experimental Cu-containing MOFs are recorded?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
-                            How many experimental Cu-containing MOFs are recorded?
+                            onclick="inputField.populateInputText(&quot;Which MOFs have the same topology as ZIF-8?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
+                            Which MOFs have the same topology as ZIF-8?
                         </li>
                         <li class="sample-question"
                             onclick="inputField.populateInputText(&quot;What synthesis routes are recorded for UiO-66?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
                             What synthesis routes are recorded for UiO-66?
                         </li>
                         <li class="sample-question"
-                            onclick="inputField.populateInputText(&quot;What is the identity of DUT-67, including its space group and source databases?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
-                            What is the identity of DUT-67, including its space group and source databases?
+                            onclick="inputField.populateInputText(&quot;Which MOFs are reported as thermally stable?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
+                            Which MOFs are reported as thermally stable?
                         </li>
                         <li class="sample-question"
-                            onclick="inputField.populateInputText(&quot;What topology is recorded for ZIF-8?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
-                            What topology is recorded for ZIF-8?
-                        </li>
-                        <li class="sample-question"
-                            onclick="inputField.populateInputText(&quot;Which MOFs have the same topology as ZIF-8?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
-                            Which MOFs have the same topology as ZIF-8?
-                        </li>
-                        <li class="sample-question"
-                            onclick="inputField.populateInputText(&quot;What linker SMILES are recorded for HKUST-1?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
-                            What linker SMILES are recorded for HKUST-1?
-                        </li>
-                        <li class="sample-question"
-                            onclick="inputField.populateInputText(&quot;How many hypothetical MOFs have the same topology as MIL-53?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
-                            How many hypothetical MOFs have the same topology as MIL-53?
-                        </li>
-                        <li class="sample-question"
-                            onclick="inputField.populateInputText(&quot;How many experimental MOFs have pcu topology?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
-                            How many experimental MOFs have pcu topology?
-                        </li>
-                        <li class="sample-question"
-                            onclick="inputField.populateInputText(&quot;What pore metrics are recorded for HKUST-1?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
-                            What pore metrics are recorded for HKUST-1?
-                        </li>
-                        <li class="sample-question"
-                            onclick="inputField.populateInputText(&quot;Which MOFs have a gravimetric surface area of at least 2500?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
-                            Which MOFs have a gravimetric surface area of at least 2500?
-                        </li>
-                        <li class="sample-question"
-                            onclick="inputField.populateInputText(&quot;Which publications are associated with MIL-101?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
-                            Which publications are associated with MIL-101?
-                        </li>
-                        <li class="sample-question"
-                            onclick="inputField.populateInputText(&quot;What accessible surface area is recorded for MIL-53?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
-                            What accessible surface area is recorded for MIL-53?
-                        </li>
-                        <li class="sample-question"
-                            onclick="inputField.populateInputText(&quot;What density and pore statistics are recorded for DUT-67?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
-                            What density and pore statistics are recorded for DUT-67?
-                        </li>
-                        <li class="sample-question"
-                            onclick="inputField.populateInputText(&quot;Which MOFs have a largest cavity diameter below 20 Å?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
-                            Which MOFs have a largest cavity diameter below 20 Å?
-                        </li>
-                        <li class="sample-question"
-                            onclick="inputField.populateInputText(&quot;What are the most common synthesis solvents after excluding DMF, DMA, and HF?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
-                            What are the most common synthesis solvents after excluding DMF, DMA, and HF?
+                            onclick="inputField.populateInputText(&quot;Which MOFs have high binary gas uptake?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
+                            Which MOFs have high binary gas uptake?
                         </li>
                         <li class="sample-question"
                             onclick="inputField.populateInputText(&quot;Which Zr-containing MOFs have carboxylate linkers?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
@@ -345,19 +291,24 @@
                             Which MOFs are reported as water-stable?
                         </li>
                         <li class="sample-question"
-                            onclick="inputField.populateInputText(&quot;Which MOFs are reported as thermally stable?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
-                            Which MOFs are reported as thermally stable?
+                            onclick="inputField.populateInputText(&quot;How many experimental Cu-containing MOFs are recorded?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
+                            How many experimental Cu-containing MOFs are recorded?
                         </li>
                         <li class="sample-question"
-                            onclick="inputField.populateInputText(&quot;Which MOFs have high binary gas uptake?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
-                            Which MOFs have high binary gas uptake?
-                        </li>
-                        <li class="sample-question"
-                            onclick="inputField.populateInputText(&quot;Which NIST adsorption MOFs can be joined to CoRE chemistry records, with Tobassco functional groups when available?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
-                            Which NIST adsorption MOFs can be joined to CoRE chemistry records, with Tobassco functional groups when available?
+                            onclick="inputField.populateInputText(&quot;How many experimental MOFs have pcu topology?&quot;); globalState.set(&quot;qa_domain&quot;, &quot;marie&quot;); askQuestion();">
+                            How many experimental MOFs have pcu topology?
                         </li>
                     </ul>
                 </div>
+
+                <!-- mop-competency -->
+                <button type="submit" class="accordion">MOP polyhedra (remote Blazegraph)</button>
+                <div class="accordion-panel">
+                    <p>Validated competency questions for the OntoMOPs A-box on Blazegraph (<code>ontomops_ogm</code>). Requires a reachable remote SPARQL endpoint; uses cache when offline.</p>
+                    <p id="mop-endpoint-note" style="font-size: 90%; color: #555;"></p>
+                    <ul id="mop-question-list"></ul>
+                </div>
+
             </section>
 
         </div>
@@ -411,7 +362,11 @@
     <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap4.min.js" type="text/javascript"></script>
     <script src="https://cdn.plot.ly/plotly-2.30.0.min.js" type="text/javascript"></script>
     <script src="https://openlayers.org/en/v4.6.5/build/ol.js" type="text/javascript"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js" type="text/javascript"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js" type="text/javascript"></script>
     <script src="/demos/zaha/static/js/accordian.js" type="text/javascript"></script>
+    <script src="./static/js/mop_questions.js" type="text/javascript"></script>
+    <script src="./static/js/rich_table.js" type="text/javascript"></script>
     <script src="./static/js/script.js" type="text/javascript"></script>
 </body>
 

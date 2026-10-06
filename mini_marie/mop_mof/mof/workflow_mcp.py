@@ -88,11 +88,15 @@ def run_workflow_online(
     workflow["online_limit"] = online_limit
     if workflow.get("online_limits"):
         workflow["online_limits"] = {k: online_limit for k in workflow["online_limits"]}
+    from mini_marie.demo_runtime import demo_force_refresh, demo_use_cache
+
     result = run_workflow(
         workflow,
         mode="online",
         online_limit=online_limit,
         workflow_name=workflow_name,
+        use_cache=demo_use_cache(),
+        force_refresh=demo_force_refresh(),
     )
     path = save_run(result)
     return format_workflow_mcp_response(result, path)
@@ -110,11 +114,15 @@ def replay_workflow_offline(
         workflow_name=workflow_name,
         workflow_path=Path(workflow_path) if workflow_path else None,
     )
+    from mini_marie.demo_runtime import demo_use_cache
+
     result = run_workflow(
         workflow,
         mode="offline",
         offline_cap=offline_cap or recorded.get("offline_cap", MCP_OFFLINE_CAP),
         workflow_name=workflow_name or recorded.get("workflow_name"),
+        use_cache=demo_use_cache(),
+        force_refresh=False,
     )
     result["replayed_from"] = str(Path(recording_path).resolve())
     result["workflow_source"] = _source

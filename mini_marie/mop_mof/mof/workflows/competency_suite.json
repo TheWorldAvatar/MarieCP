@@ -107,7 +107,10 @@
       "id": "CQ04_SYNTHESIS_UIO66",
       "question": "What synthesis routes are recorded for UiO-66?",
       "steps": [
-        { "tool": "get_synthesis_by_mof_name", "args": { "mof_name": "uio-66" } }
+        {
+          "tool": "get_synthesis_by_mof_name",
+          "args": { "mof_name": "uio-66", "synthesis_only": true }
+        }
       ]
     },
     {
@@ -262,7 +265,14 @@
     {
       "id": "CQ_D6_THERMAL",
       "question": "Which MOFs are reported as thermally stable?",
-      "steps": [{ "tool": "get_thermal_stable_mofs", "args": {} }]
+      "steps": [
+        { "tool": "get_thermal_stable_mofs", "args": { "min_thermal": 300 } },
+        {
+          "tool": "count_thermal_stable_mofs",
+          "args": { "min_thermal": 300 },
+          "extract": { "thermal_count": { "pick": "row_field", "field": "count", "index": 0 } }
+        }
+      ]
     },
     {
       "id": "CQ_D7_BINARY_UPTAKE",

@@ -29,9 +29,11 @@ class ModelConfig:
 
 
         else:
-            return {
-                # "max_tokens": self.max_tokens,
+            out = {
                 "timeout": self.timeout,
                 "temperature": self.temperature,
-                "top_p": self.top_p
+                "top_p": self.top_p,
             }
+            if self.max_tokens:
+                out["max_tokens"] = self.max_tokens
+            return out

@@ -1,0 +1,25 @@
+PREFIX bldg: <http://www.opengis.net/citygml/building/2.0/>
+PREFIX obe: <https://www.theworldavatar.com/kg/ontobuiltenv/>
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+SELECT ?metric ?count
+WHERE {
+  { SELECT ("total_buildings" AS ?metric) (COUNT(?b) AS ?count) WHERE { ?b a bldg:Building } }
+  UNION
+  { SELECT ("with_height" AS ?metric) (COUNT(?b) AS ?count) WHERE { ?b a bldg:Building ; bldg:measuredHeight ?h } }
+  UNION
+  { SELECT ("with_storeys" AS ?metric) (COUNT(?b) AS ?count) WHERE { ?b a bldg:Building ; bldg:storeysAboveGround ?s } }
+  UNION
+  { SELECT ("with_usage" AS ?metric) (COUNT(?b) AS ?count) WHERE { ?b a bldg:Building ; obe:hasPropertyUsage ?u } }
+  UNION
+  { SELECT ("with_geometry" AS ?metric) (COUNT(DISTINCT ?b) AS ?count) WHERE { ?b a bldg:Building ; geo:hasGeometry ?g } }
+  UNION
+  { SELECT ("with_label" AS ?metric) (COUNT(?b) AS ?count)
+    WHERE { ?b a bldg:Building ; <http://www.w3.org/2000/01/rdf-schema#label> ?label } }
+  UNION
+  { SELECT ("dabgeo_buildings" AS ?metric) (COUNT(?b) AS ?count) WHERE { ?b a <http://www.purl.org/oema/enaeq/Building> } }
+  UNION
+  { SELECT ("with_ubem_devices" AS ?metric) (COUNT(?b) AS ?count) WHERE {
+      ?b a <http://www.purl.org/oema/enaeq/Building> .
+      ?b <http://www.theworldavatar.com/kg/ontoubemmp/hasDevice> ?d
+    } }
+}

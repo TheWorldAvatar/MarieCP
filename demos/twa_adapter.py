@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -22,6 +23,7 @@ from demos.marie_format import (
     tables_from_tool_outputs,
     tables_from_zaha_items,
 )
+from demos.twa_format import kgqa_result_to_twa, kgqa_result_to_twa_display
 
 
 def load_offline_payload(path: str) -> Optional[Dict[str, Any]]:
@@ -43,11 +45,71 @@ def _table_rows(value: Any) -> List[Dict[str, Any]]:
     return []
 
 
-_PREFERRED_OFFLINE_VARS = (
+_EXTENDED_PREFERRED_OFFLINE_VARS = (
+    "top_ubem_rows",
     "top_building_rows",
     "buildings_with_wkt",
     "location_join_rows",
 )
+
+
+def _offline_answer_variable(payload: Dict[str, Any]) -> Optional[str]:
+    var = payload.get("answer_variable")
+    if var:
+        return str(var)
+    wf_def = payload.get("workflow_definition") or {}
+    var = wf_def.get("answer_variable")
+    if var:
+        return str(var)
+    return None
+
+
+def _rows_for_offline_variable(payload: Dict[str, Any], var_name: str) -> List[Dict[str, Any]]:
+    sidecar_vars = _sidecar_variable_paths(payload)
+    path = sidecar_vars.get(var_name)
+    if path:
+        rows = _rows_from_sidecar(path)
+        if rows:
+            return rows
+    variables = payload.get("variables") or {}
+    return _table_rows(variables.get(var_name))
+
+
+def _answer_rows_from_offline_payload(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Resolve authoritative table rows from offline replay metadata."""
+    from demos.kg_row_narrative import pick_best_call_trace_rows
+
+    question = str(payload.get("question") or "")
+    answer_var = _offline_answer_variable(payload)
+    if answer_var:
+        rows = _rows_for_offline_variable(payload, answer_var)
+        if rows:
+            return rows
+
+    answer_rows = _table_rows(payload.get("answer"))
+    if answer_rows and not all(isinstance(r, dict) and "count" in r and len(r) <= 2 for r in answer_rows):
+        return answer_rows
+
+    best_trace = pick_best_call_trace_rows(payload, question)
+    if best_trace:
+        return best_trace
+
+    if answer_rows:
+        return answer_rows
+
+    sidecar_vars = _sidecar_variable_paths(payload)
+    for var in _EXTENDED_PREFERRED_OFFLINE_VARS:
+        path = sidecar_vars.get(var)
+        if path:
+            rows = _rows_from_sidecar(path)
+            if rows:
+                return rows
+    variables = payload.get("variables") or {}
+    for var in _EXTENDED_PREFERRED_OFFLINE_VARS:
+        rows = _table_rows(variables.get(var))
+        if rows:
+            return rows
+    return []
 
 
 def _sidecar_variable_paths(payload: Dict[str, Any]) -> Dict[str, str]:
@@ -77,15 +139,25 @@ def _rows_from_sidecar(path: str, *, limit: int = 500) -> List[Dict[str, Any]]:
 def _preferred_offline_table(payload: Dict[str, Any]) -> Optional[Tuple[str, List[Dict[str, Any]]]]:
     from mini_marie.row_annotations import stamp_offline_table_rows
 
+    answer_var = _offline_answer_variable(payload)
+    if answer_var:
+        rows = _rows_for_offline_variable(payload, answer_var)
+        if rows:
+            return answer_var, stamp_offline_table_rows(rows, payload)
+
+    answer_rows = _table_rows(payload.get("answer"))
+    if answer_rows:
+        return "answer", stamp_offline_table_rows(answer_rows, payload)
+
     sidecar_vars = _sidecar_variable_paths(payload)
-    for var in _PREFERRED_OFFLINE_VARS:
+    for var in _EXTENDED_PREFERRED_OFFLINE_VARS:
         path = sidecar_vars.get(var)
         if path:
             rows = _rows_from_sidecar(path)
             if rows:
                 return var, stamp_offline_table_rows(rows, payload)
     variables = payload.get("variables") or {}
-    for var in _PREFERRED_OFFLINE_VARS:
+    for var in _EXTENDED_PREFERRED_OFFLINE_VARS:
         var_rows = _table_rows(variables.get(var))
         if var_rows:
             return var, stamp_offline_table_rows(var_rows, payload)
@@ -124,23 +196,15 @@ _DEFAULT_OFFLINE_CAP = 500_000
 
 
 def _demo_auto_offline() -> bool:
-    """Match core KGQA default: replay full cache when a recording exists."""
-    return os.environ.get("DEMO_AUTO_OFFLINE", "true").strip().lower() not in (
-        "0",
-        "false",
-        "no",
-        "off",
-    )
+    from mini_marie.demo_runtime import demo_auto_offline
+
+    return demo_auto_offline()
 
 
 def _demo_force_refresh() -> bool:
-    """Bypass SPARQL/tool result cache so each question runs a fresh online probe."""
-    return os.environ.get("DEMO_FORCE_REFRESH", "true").strip().lower() not in (
-        "0",
-        "false",
-        "no",
-        "off",
-    )
+    from mini_marie.demo_runtime import demo_force_refresh
+
+    return demo_force_refresh()
 
 
 def _replay_offline_if_enabled(
@@ -210,6 +274,8 @@ def _is_blank_answer_value(answer: Any) -> bool:
 
 def _display_answer(kgqa: Dict[str, Any]) -> Any:
     """Prefer offline replay answer for UI when available."""
+    from demos.kg_row_narrative import is_weak_tool_summary
+
     offline = kgqa.get("offline") or {}
     if offline.get("status") == "error" and not offline.get("skipped"):
         err = offline.get("error")
@@ -219,7 +285,10 @@ def _display_answer(kgqa: Dict[str, Any]) -> Any:
     if not _is_blank_answer_value(answer):
         if isinstance(answer, list) and len(answer) > 1:
             return "\n\n".join(str(a) for a in answer if a)
-        return answer
+        if isinstance(answer, str) and is_weak_tool_summary(answer):
+            pass
+        else:
+            return answer
     row_count = offline.get("row_count")
     if row_count and int(row_count) > 0:
         offline_paths = kgqa.get("offline_recording_paths") or offline.get("offline_paths") or []
@@ -230,12 +299,22 @@ def _display_answer(kgqa: Dict[str, Any]) -> Any:
         for offline_path in offline_paths:
             payload = load_offline_payload(offline_path)
             if payload:
-                tables = collect_row_tables(payload)
-                for _name, rows in tables:
-                    if rows:
-                        preview = ", ".join(f"{k}: {v}" for k, v in rows[0].items() if v)[:400]
-                        if preview:
-                            return f"Full-scale replay returned {row_count} row(s). Top result: {preview}"
+                from demos.kg_row_narrative import pick_best_call_trace_rows, summarize_rows
+
+                question = str(kgqa.get("question") or payload.get("question") or "")
+                rows = pick_best_call_trace_rows(payload, question)
+                if not rows:
+                    tables = collect_row_tables(payload)
+                    for _name, rows in tables:
+                        if rows:
+                            break
+                if rows:
+                    text = summarize_rows(rows, question, total_count=int(row_count))
+                    if text:
+                        return text
+                    preview = ", ".join(f"{k}: {v}" for k, v in rows[0].items() if v)[:400]
+                    if preview:
+                        return f"Full-scale replay returned {row_count} row(s). Top result: {preview}"
     online = kgqa.get("online_answer")
     if not _is_blank_answer_value(online):
         return online
@@ -306,19 +385,67 @@ def route_for_qa_domain(question: str, qa_domain: Optional[str]) -> RouteResult:
 
 
 def _wkt_from_row(row: Dict[str, Any]) -> Optional[str]:
+    from demos.twa_format import _normalize_wkt
+
     for key, val in row.items():
         if not isinstance(val, str):
             continue
         lk = key.lower()
         if "wkt" in lk or lk in {"geometry", "geom", "footprint"}:
-            if val.upper().startswith(("POINT", "POLYGON", "LINESTRING", "MULTI")):
-                return val
-        if val.upper().startswith(("POINT(", "POLYGON(", "LINESTRING(", "MULTIPOLYGON(")):
-            return val
+            normalized = _normalize_wkt(val)
+            if normalized:
+                return normalized
     return None
 
 
-def _rows_to_table(name: str, rows: List[Dict[str, Any]], *, limit: int = 500) -> List[Dict[str, Any]]:
+def _collect_row_wkts(rows: List[Dict[str, Any]], *, limit: int = 50) -> List[str]:
+    wkts: List[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        wkt = _wkt_from_row(row)
+        if not wkt or wkt in seen:
+            continue
+        seen.add(wkt)
+        wkts.append(wkt)
+        if len(wkts) >= limit:
+            break
+    return wkts
+
+
+def _infer_city_for_map(name: str, rows: List[Dict[str, Any]]) -> str:
+    for row in rows[:20]:
+        city = row.get("city")
+        if isinstance(city, str) and city.strip():
+            return city.strip().lower()
+    text = (name or "").lower()
+    for city in ("pirmasens", "bremen", "kaiserslautern"):
+        if city in text:
+            return city
+    return ""
+
+
+def _map_items_from_rows(name: str, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    from mini_marie.zaha.twa_city.gis_visualization import recenter_wkts_to_city
+
+    wkts = _collect_row_wkts(rows)
+    if not wkts:
+        return []
+    city = _infer_city_for_map(name, rows)
+    if city:
+        wkts = recenter_wkts_to_city(wkts, city)
+    item: Dict[str, Any] = {"type": "map", "title": name, "wkt_crs84": wkts[0]}
+    if len(wkts) > 1:
+        item["wkt_list"] = wkts
+    return [item]
+
+
+def _rows_to_table(
+    name: str,
+    rows: List[Dict[str, Any]],
+    *,
+    limit: int = 500,
+    include_map: bool = True,
+) -> List[Dict[str, Any]]:
     if not rows:
         return []
     trimmed = rows[:limit]
@@ -326,10 +453,29 @@ def _rows_to_table(name: str, rows: List[Dict[str, Any]], *, limit: int = 500) -
     items: List[Dict[str, Any]] = [
         {"type": "table", "vars": vars_, "bindings": trimmed},
     ]
-    wkt = _wkt_from_row(trimmed[0])
-    if wkt:
-        items.append({"type": "map", "title": name, "wkt_crs84": wkt})
+    if include_map:
+        items.extend(_map_items_from_rows(name, trimmed))
     return items
+
+
+def _wkt_rows_from_offline_payload(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    sidecar_vars = _sidecar_variable_paths(payload)
+    for var in ("buildings_with_wkt", "location_join_rows"):
+        path = sidecar_vars.get(var)
+        if path:
+            rows = _rows_from_sidecar(path)
+            if rows:
+                return rows
+    variables = payload.get("variables") or {}
+    for var in ("buildings_with_wkt", "location_join_rows"):
+        rows = _table_rows(variables.get(var))
+        if rows:
+            return rows
+    return []
+
+
+def _table_rows_from_offline_payload(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return _answer_rows_from_offline_payload(payload)
 
 
 def _offline_payload_label(payload: Dict[str, Any]) -> str:
@@ -351,11 +497,25 @@ def _data_from_offline(offline_path: Optional[str]) -> List[Dict[str, Any]]:
     if not payload:
         return []
     label = _offline_payload_label(payload)
+    data: List[Dict[str, Any]] = []
+
+    table_rows = _table_rows_from_offline_payload(payload)
+    if table_rows:
+        data.extend(_rows_to_table(label, table_rows, include_map=False))
+
+    wkt_rows = _wkt_rows_from_offline_payload(payload)
+    if wkt_rows:
+        data.extend(_map_items_from_rows(label, wkt_rows))
+    elif table_rows:
+        data.extend(_map_items_from_rows(label, table_rows))
+
+    if data:
+        return data
+
     preferred = _preferred_offline_table(payload)
     if preferred:
         _name, rows = preferred
         return _rows_to_table(label, rows)
-    data: List[Dict[str, Any]] = []
     for name, rows in collect_row_tables(payload):
         data.extend(_rows_to_table(name, rows))
     return data
@@ -431,9 +591,13 @@ def _summarize_competency_tool_output(tool_content: str, question: str) -> str:
         )
 
     if "sample_results" in tool_content:
-        tail = tool_content.split("sample_results", 1)[1]
-        cleaned = re.sub(r"^--- step \d+ ---\s*", "", tail, flags=re.M)
-        cleaned = cleaned.split("next_step")[0].strip()
+        from demos.kg_row_narrative import pick_best_step_tsv, summarize_rows
+
+        cleaned = pick_best_step_tsv(tool_content, question) or ""
+        if not cleaned:
+            tail = tool_content.split("sample_results", 1)[1]
+            cleaned = re.sub(r"^--- step \d+ ---\s*", "", tail, flags=re.M)
+            cleaned = cleaned.split("next_step")[0].strip()
         parsed = parse_tabular_content(cleaned)
         if parsed:
             _cols, rows = parsed
@@ -441,6 +605,9 @@ def _summarize_competency_tool_output(tool_content: str, question: str) -> str:
                 hbond = _row_to_hbond_text(rows[0])
                 if hbond:
                     return hbond
+                structured = summarize_rows(rows, question)
+                if structured:
+                    return structured
                 preview = ", ".join(f"{k}: {v}" for k, v in rows[0].items() if v)[:400]
                 if preview:
                     return f"Top result for your question: {preview}"
@@ -540,8 +707,13 @@ def _summarize_sg_tool_rows(rows: List[Dict[str, Any]], question: str) -> str:
             f"**{row.get('area_sqm')}** sqm plot area"
             + (f" (max GFA **{row['max_gfa']}** sqm)." if row.get("max_gfa") else ".")
         )
-    preview = ", ".join(f"{k}: {v}" for k, v in row.items() if v)[:400]
-    return preview or f"Tool returned: {row}"
+    from demos.twa_format import _summarize_metric_row
+
+    metric = _summarize_metric_row(row, question)
+    if metric:
+        return metric
+    preview = "; ".join(f"{k.replace('_', ' ')} {v}" for k, v in row.items() if v)[:400]
+    return preview or "Tool returned a result row."
 
 
 def _sg_tool_for_entry(entry: Any) -> Tuple[Optional[str], Optional[Any]]:
@@ -632,9 +804,13 @@ def _try_direct_chemistry_workflow(
 
         tool_outputs: List[Dict[str, str]] = []
         if "sample_results" in tool_content:
-            tail = tool_content.split("sample_results", 1)[1]
-            cleaned = re.sub(r"^--- step \d+ ---\s*", "", tail, flags=re.M)
-            cleaned = cleaned.split("next_step")[0].strip()
+            from demos.kg_row_narrative import pick_best_step_tsv
+
+            cleaned = pick_best_step_tsv(tool_content, question) or ""
+            if not cleaned:
+                tail = tool_content.split("sample_results", 1)[1]
+                cleaned = re.sub(r"^--- step \d+ ---\s*", "", tail, flags=re.M)
+                cleaned = cleaned.split("next_step")[0].strip()
             parsed = parse_tabular_content(cleaned)
             if parsed:
                 _cols, rows = parsed
@@ -706,9 +882,13 @@ def _try_direct_mof_competency_workflow(
 
         tool_outputs: List[Dict[str, str]] = []
         if "sample_results" in tool_content:
-            tail = tool_content.split("sample_results", 1)[1]
-            cleaned = re.sub(r"^--- step \d+ ---\s*", "", tail, flags=re.M)
-            cleaned = cleaned.split("next_step")[0].strip()
+            from demos.kg_row_narrative import pick_best_step_tsv
+
+            cleaned = pick_best_step_tsv(tool_content, question) or ""
+            if not cleaned:
+                tail = tool_content.split("sample_results", 1)[1]
+                cleaned = re.sub(r"^--- step \d+ ---\s*", "", tail, flags=re.M)
+                cleaned = cleaned.split("next_step")[0].strip()
             parsed = parse_tabular_content(cleaned)
             if parsed:
                 cols, rows = parsed
@@ -761,6 +941,156 @@ def _try_direct_mof_competency_workflow(
         }
     return None
 
+
+def _summarize_city_workflow_rows(rows: List[Dict[str, Any]], *, city: str) -> str:
+    if not rows:
+        return f"No building results returned for {city}."
+    lines = [f"Found **{len(rows)}** result rows for **{city}**."]
+    for row in rows[:8]:
+        label = (
+            row.get("dab_building")
+            or row.get("building")
+            or row.get("label")
+            or row.get("uuid")
+            or ""
+        )
+        if isinstance(label, str) and label.startswith("http"):
+            label = label.rsplit("/", 1)[-1]
+        if row.get("heat_kwh_per_m2") is not None:
+            lines.append(f"- {label}: {row.get('heat_kwh_per_m2')} kWh/m² heat supply")
+        elif row.get("co2_savings") is not None:
+            lines.append(f"- {label}: {row.get('co2_savings')} CO2 savings")
+        else:
+            height = row.get("height") or row.get("height_m") or "?"
+            usage = row.get("usage_type") or row.get("usage") or ""
+            usage_short = usage.rsplit("/", 1)[-1] if isinstance(usage, str) and "/" in usage else usage
+            extra = f", usage {usage_short}" if usage_short else ""
+            lines.append(f"- {label}: {height} m{extra}")
+    if len(rows) > 8:
+        lines.append(f"- … and {len(rows) - 8} more")
+    if any(_wkt_from_row(row) for row in rows):
+        lines.append("Building footprints are shown on the map below.")
+    return "\n".join(lines)
+
+
+def _run_direct_city_workflow(
+    question: str,
+    route: RouteResult,
+    *,
+    workflow_name: str,
+    parameters: Dict[str, Any],
+    catalog_entry_id: Optional[str] = None,
+    reason: str,
+) -> Dict[str, Any]:
+    from mini_marie.kgqa.recording_utils import extract_from_text
+    from mini_marie.zaha.twa_city.workflow_mcp import run_workflow_online
+
+    city = str(parameters.get("city") or "")
+    t0 = time.perf_counter()
+    tool_content = run_workflow_online(
+        workflow_name,
+        online_limit=10,
+        question=question,
+        parameters_json=json.dumps(parameters),
+    )
+    online_ms = round((time.perf_counter() - t0) * 1000)
+    rec = extract_from_text(tool_content)
+    recording_path = rec.get("recording_path")
+
+    t_off = time.perf_counter()
+    offline_result = _replay_offline_if_enabled(
+        recording_path,
+        workflow_id=workflow_name,
+    )
+    offline_ms = round((time.perf_counter() - t_off) * 1000) if offline_result else 0
+
+    display_rows: List[Dict[str, Any]] = []
+    offline_path = (offline_result or {}).get("offline_path")
+    if offline_path:
+        payload = load_offline_payload(offline_path)
+        if payload:
+            display_rows = (
+                _answer_rows_from_offline_payload(payload)
+                or _wkt_rows_from_offline_payload(payload)
+            )
+
+    online_answer = _summarize_city_workflow_rows(display_rows, city=city or "city")
+    if not display_rows:
+        online_answer = (
+            f"Ran `{workflow_name}` for {city or 'city'}. "
+            "Results will appear in the table once offline replay completes."
+        )
+
+    metadata: Dict[str, Any] = {
+        "tool_activity": {
+            "tool_outputs": [{"name": "run_workflow_online", "content": tool_content}],
+            "executed_tool_names": ["run_workflow_online"],
+        },
+        "workflow_id": workflow_name,
+        "catalog_entry_id": catalog_entry_id,
+        "workflow_parameters": parameters,
+    }
+
+    return {
+        "question": question,
+        "online_answer": online_answer,
+        "metadata": metadata,
+        "route": {
+            "mcp_servers": route.mcp_servers,
+            "domain": route.domain,
+            "domains": route.domains,
+            "reason": reason,
+            "catalog_entry": route.catalog_entry,
+        },
+        "offline": offline_result,
+        "offline_recording_path": offline_path,
+        "recording_path": recording_path,
+        "workflow_id": workflow_name,
+        "timing": {"online_ms": online_ms, "offline_ms": offline_ms},
+    }
+
+
+def _try_direct_city_workflow(
+    question: str,
+    route: RouteResult,
+) -> Optional[Dict[str, Any]]:
+    """Run catalogued German city workflows without the ReAct loop."""
+    if "twa-city" not in route.mcp_servers and route.domain != "city":
+        return None
+
+    from demos.german_city_specs import (
+        is_workflow_spec,
+        lookup_german_city_question,
+        resolve_city_workflow_parameters,
+    )
+
+    spec = lookup_german_city_question(question)
+    if spec and is_workflow_spec(spec):
+        workflow_name = str(spec.get("workflow") or "city_ranked_buildings")
+        parameters = resolve_city_workflow_parameters(question, workflow_name, spec=spec)
+        return _run_direct_city_workflow(
+            question,
+            route,
+            workflow_name=workflow_name,
+            parameters=parameters,
+            catalog_entry_id=str(spec.get("id") or ""),
+            reason=f"direct city workflow {workflow_name} ({spec.get('id')})",
+        )
+
+    for entry in _catalog_entries_from_route(route):
+        if entry.domain != "city" or not entry.workflow_id:
+            continue
+        workflow_name = str(entry.workflow_id)
+        parameters = resolve_city_workflow_parameters(question, workflow_name)
+        return _run_direct_city_workflow(
+            question,
+            route,
+            workflow_name=workflow_name,
+            parameters=parameters,
+            catalog_entry_id=entry.id,
+            reason=f"direct city workflow {workflow_name} ({entry.id})",
+        )
+    return None
 
 
 def _try_direct_cross_domain(
@@ -839,13 +1169,82 @@ def _try_direct_cross_domain(
     }
 
 
-def _try_direct_from_route(question: str, route: RouteResult) -> Optional[Dict[str, Any]]:
+def _try_direct_mop_competency(
+    question: str,
+    route: RouteResult,
+) -> Optional[Dict[str, Any]]:
+    """Run catalogued MOP Blazegraph competency tools without the ReAct loop."""
+    from demos.mop_specs import lookup_mop_question, run_mop_competency_tool
+    from demos.marie_format import parse_tabular_content
+
+    spec = lookup_mop_question(question)
+    if not spec:
+        return None
+
+    t0 = time.perf_counter()
+    tool_content = run_mop_competency_tool(spec)
+    online_ms = round((time.perf_counter() - t0) * 1000)
+    online_answer = _summarize_competency_tool_output(tool_content, question)
+
+    tool_outputs: List[Dict[str, str]] = [{"name": spec.get("tool", "mop_remote"), "content": tool_content}]
+    parsed = parse_tabular_content(tool_content)
+    if parsed:
+        cols, rows = parsed
+        if rows and not online_answer.strip():
+            online_answer = _summarize_competency_tool_output(
+                "\t".join(cols) + "\n" + "\n".join("\t".join(str(r.get(c, "")) for c in cols) for r in rows[:10]),
+                question,
+            )
+
+    return {
+        "question": question,
+        "online_answer": online_answer,
+        "metadata": {
+            "tool_activity": {
+                "tool_outputs": tool_outputs,
+                "executed_tool_names": [spec.get("tool", "mop_remote")],
+            },
+            "catalog_entry_id": spec.get("id"),
+            "competency_envelope": tool_content,
+        },
+        "route": {
+            "mcp_servers": route.mcp_servers,
+            "domain": "mops",
+            "domains": route.domains or ["mops"],
+            "reason": f"direct MOP Blazegraph tool {spec.get('tool')} ({spec.get('id')})",
+            "catalog_entry": None,
+        },
+        "timing": {"online_ms": online_ms, "offline_ms": 0},
+    }
+
+
+def _mof_competency_direct_bypass_enabled() -> bool:
+    """MOF catalog workflows use ReAct + MCP by default; opt in to Python direct bypass."""
+    import os
+
+    for key in ("MOF_COMPETENCY_DIRECT", "MARIE_MOF_DIRECT"):
+        if os.environ.get(key, "").strip().lower() in ("1", "true", "yes"):
+            return True
+    return False
+
+
+def _try_direct_from_route(
+    question: str,
+    route: RouteResult,
+) -> Optional[Dict[str, Any]]:
     cross = _try_direct_cross_domain(question, route)
     if cross:
         return cross
-    mof = _try_direct_mof_competency_workflow(question, route)
-    if mof:
-        return mof
+    city = _try_direct_city_workflow(question, route)
+    if city:
+        return city
+    mop = _try_direct_mop_competency(question, route)
+    if mop:
+        return mop
+    if _mof_competency_direct_bypass_enabled():
+        mof = _try_direct_mof_competency_workflow(question, route)
+        if mof:
+            return mof
     sg = _try_direct_sg_tool(question, route)
     if sg:
         return sg
@@ -909,47 +1308,53 @@ def _resolve_offline_recording_paths(kgqa: Dict[str, Any]) -> List[str]:
     return paths
 
 
-def kgqa_result_to_twa(kgqa: Dict[str, Any]) -> Dict[str, Any]:
-    """Convert orchestrator output to {metadata, data} for POST /qa/."""
-    timing = kgqa.get("timing") or {}
-    metadata = kgqa.get("metadata") or {}
-    online_ms = int(timing.get("online_ms") or timing.get("total_ms") or 0)
+def _kg_enrich_marie_table_identities(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Offline KG identity merge + demo display columns (all MOF tables)."""
+    from mini_marie.mop_mof.mof.competency_cache import CompetencyCache
+    from mini_marie.mop_mof.mof.mof_identity_enrichment import (
+        enrich_mof_rows,
+        extract_mof_keys_from_rows,
+    )
 
-    offline_paths = _resolve_offline_recording_paths(kgqa)
-    data = _data_from_offline_paths(offline_paths)
     if not data:
-        answer = kgqa.get("online_answer") or ""
-        if isinstance(answer, list) and answer and isinstance(answer[0], dict):
-            data = _rows_to_table("answer", answer)
-        else:
-            text = answer if isinstance(answer, str) else json.dumps(answer, ensure_ascii=False)
-            data = [{"type": "table", "vars": ["answer"], "bindings": [{"answer": text}]}]
+        return data
+    cache = CompetencyCache()
+    out: List[Dict[str, Any]] = []
+    for item in data:
+        if item.get("type") != "table":
+            out.append(item)
+            continue
+        rows = item.get("data") or item.get("bindings") or []
+        if not isinstance(rows, list) or not extract_mof_keys_from_rows(rows):
+            out.append(item)
+            continue
+        enriched = enrich_mof_rows(rows, cache=cache, allow_remote=False)
+        merged = dict(item)
+        if item.get("data") is not None:
+            merged["data"] = enriched
+        if item.get("bindings") is not None:
+            merged["bindings"] = enriched
+        out.append(merged)
+    return out
 
-    return {
-        "metadata": {"steps": _steps_from_metadata(kgqa.get("question") or "", metadata, online_ms)},
-        "data": data,
-    }
 
-
-def kgqa_result_to_marie(kgqa: Dict[str, Any]) -> Dict[str, Any]:
+def kgqa_result_to_marie(
+    kgqa: Dict[str, Any],
+    *,
+    web: Optional[Any] = None,
+) -> Dict[str, Any]:
     """Convert orchestrator output to Marie chemistry demo POST /api/qa/ shape."""
+    from demos.hybrid_interpretation import show_web_sources_table, web_sources_table
+
     question = kgqa.get("question") or ""
     metadata = kgqa.get("metadata") or {}
-    tool_outputs = (metadata.get("tool_activity") or {}).get("tool_outputs") or []
+    tool_activity = metadata.get("tool_activity") or {}
+    tool_outputs = list(tool_activity.get("tool_outputs") or [])
+    if not tool_outputs:
+        for name in tool_activity.get("executed_tool_names") or []:
+            if name:
+                tool_outputs.append({"name": name, "content": ""})
 
-    twa = kgqa_result_to_twa(kgqa)
-    offline_tables = tables_from_zaha_items(twa.get("data") or [])
-    tool_tables = tables_from_tool_outputs(tool_outputs, skip_meta=True)
-    if tool_tables and not _substantive_marie_tables(offline_tables):
-        offline_tables = tool_tables
-    elif len(offline_tables) == 1:
-        only = offline_tables[0]
-        cols = only.get("columns") or []
-        rows = only.get("data") or []
-        if cols in (["answer"], ["Summary"]) and rows:
-            cell = str(rows[0].get(cols[0], ""))
-            if _is_weak_answer(cell):
-                offline_tables = []
     display_answer = _display_answer(kgqa)
     envelope = _competency_envelope_from_metadata(metadata)
     if envelope:
@@ -962,6 +1367,21 @@ def kgqa_result_to_marie(kgqa: Dict[str, Any]) -> Dict[str, Any]:
         or _is_weak_answer(str(display_answer or ""))
     ):
         display_answer = summarized
+
+    kgqa_for_display = {**kgqa, "online_answer": display_answer}
+    twa = kgqa_result_to_twa(kgqa_for_display)
+    offline_tables = tables_from_zaha_items(twa.get("data") or [])
+    tool_tables = tables_from_tool_outputs(tool_outputs, skip_meta=True)
+    if tool_tables and not _substantive_marie_tables(offline_tables):
+        offline_tables = tool_tables
+    elif len(offline_tables) == 1:
+        only = offline_tables[0]
+        cols = only.get("columns") or []
+        rows = only.get("data") or []
+        if cols in (["answer"], ["Summary"]) and rows:
+            cell = str(rows[0].get(cols[0], ""))
+            if _is_weak_answer(cell):
+                offline_tables = []
     if _is_blank_answer_value(display_answer):
         display_answer = (
             f"No matching records were found in the local chemistry cache for: {question}"
@@ -971,6 +1391,15 @@ def kgqa_result_to_marie(kgqa: Dict[str, Any]) -> Dict[str, Any]:
         tool_outputs=tool_outputs,
         online_answer=display_answer,
     )
+    marie_data = _kg_enrich_marie_table_identities(marie_data)
+    from demos.table_presentation import enrich_marie_tables
+
+    marie_data = enrich_marie_tables(marie_data, question=question)
+
+    if web is not None and show_web_sources_table():
+        web_table = web_sources_table(web)
+        if web_table:
+            marie_data.append(web_table)
 
     narrative = build_marie_narrative(
         question,
@@ -979,12 +1408,46 @@ def kgqa_result_to_marie(kgqa: Dict[str, Any]) -> Dict[str, Any]:
         data=marie_data,
     )
 
+    metadata = build_marie_metadata(question, kgqa, tool_outputs)
+    if web is not None:
+        metadata["dual_source"] = True
+        metadata["web_search"] = {
+            "backend": web.backend,
+            "model": web.model,
+            "elapsed_ms": web.elapsed_ms,
+            "source_count": len(web.sources or []),
+            "error": web.error,
+            "summary_preview": (web.summary or "")[:500],
+        }
+
     payload = {
-        "metadata": build_marie_metadata(question, kgqa, tool_outputs),
+        "metadata": metadata,
         "visualisation": {},
         "data": marie_data,
         "_narrative": narrative,
+        "_display_answer": display_answer,
+        "_tool_outputs": tool_outputs,
     }
+    return payload
+
+
+async def _finalize_marie_payload(payload: Dict[str, Any], kgqa: Dict[str, Any], web: Optional[Any]) -> Dict[str, Any]:
+    from demos.hybrid_interpretation import synthesize_marie_dual_source
+
+    question = kgqa.get("question") or ""
+    display_answer = payload.pop("_display_answer", None)
+    tool_outputs = payload.pop("_tool_outputs", []) or []
+    marie_data = payload.get("data") or []
+    payload["_narrative"] = await synthesize_marie_dual_source(
+        question,
+        kgqa=kgqa,
+        marie_data=marie_data,
+        display_answer=display_answer,
+        tool_outputs=tool_outputs,
+        web=web,
+    )
+    payload.pop("_display_answer", None)
+    payload.pop("_tool_outputs", None)
     return payload
 
 
@@ -1087,6 +1550,37 @@ async def _execute_kgqa(
     }
 
 
+async def _run_kgqa_dual(
+    question: str,
+    *,
+    qa_domain: Optional[str] = None,
+    model_name: str = "gpt-4o",
+    recursion_limit: int = 120,
+) -> Tuple[Dict[str, Any], Optional[Any]]:
+    """KGQA and optional web search in parallel."""
+    from mini_marie.web_search import marie_web_search_enabled, run_web_search
+
+    if marie_web_search_enabled():
+        kgqa_task = asyncio.create_task(
+            _run_kgqa_core(
+                question,
+                qa_domain=qa_domain,
+                model_name=model_name,
+                recursion_limit=recursion_limit,
+            )
+        )
+        web_task = asyncio.create_task(run_web_search(question))
+        kgqa, web = await asyncio.gather(kgqa_task, web_task)
+        return kgqa, web
+    kgqa = await _run_kgqa_core(
+        question,
+        qa_domain=qa_domain,
+        model_name=model_name,
+        recursion_limit=recursion_limit,
+    )
+    return kgqa, None
+
+
 async def _run_kgqa_core(
     question: str,
     *,
@@ -1109,6 +1603,9 @@ async def _run_kgqa_core(
             recursion_limit=recursion_limit,
             route=route,
         )
+        kgqa.setdefault("metadata", {})["agent_driven"] = True
+    else:
+        kgqa.setdefault("metadata", {})["agent_driven"] = False
     return kgqa
 
 
@@ -1120,13 +1617,16 @@ async def run_twa_qa(
     recursion_limit: int = 120,
 ) -> Dict[str, Any]:
     """Execute KGQA and return TWA-compatible QA payload."""
-    kgqa = await _run_kgqa_core(
+    kgqa, web = await _run_kgqa_dual(
         question,
         qa_domain=qa_domain,
         model_name=model_name,
         recursion_limit=recursion_limit,
     )
-    return kgqa_result_to_twa(kgqa)
+    if web is not None:
+        kgqa["web_search_result"] = web.to_dict()
+    display = await kgqa_result_to_twa_display(kgqa, web=web)
+    return display
 
 
 async def run_marie_qa(
@@ -1137,13 +1637,14 @@ async def run_marie_qa(
     recursion_limit: int = 120,
 ) -> Dict[str, Any]:
     """Execute KGQA and return Marie demo POST /api/qa/ payload."""
-    kgqa = await _run_kgqa_core(
+    kgqa, web = await _run_kgqa_dual(
         question,
         qa_domain=qa_domain or "marie",
         model_name=model_name,
         recursion_limit=recursion_limit,
     )
-    payload = kgqa_result_to_marie(kgqa)
+    payload = kgqa_result_to_marie(kgqa, web=web)
+    payload = await _finalize_marie_payload(payload, kgqa, web)
     narrative = payload.pop("_narrative", "")
     request_id = str(uuid.uuid4())
     _MARIE_SESSIONS[request_id] = {
@@ -1152,6 +1653,7 @@ async def run_marie_qa(
         "narrative": narrative,
     }
     payload["request_id"] = request_id
+    payload["narrative"] = narrative
     return payload
 
 
@@ -1165,14 +1667,35 @@ def stream_marie_chat_events(qa_request_id: str) -> Generator[str, None, None]:
     yield from stream_chat_events(question, data_items, narrative=narrative)
 
 
-def _extract_table_snippet(item: Dict[str, Any]) -> str:
+def _extract_table_snippet(item: Dict[str, Any], question: str = "") -> str:
+    """Natural-language snippet from a table — never dump raw JSON into chat."""
+    from demos.twa_format import _looks_like_raw_json, _narrative_from_data, _summarize_metric_row
+
     rows = item.get("data") or item.get("bindings") or []
     if not rows:
         return ""
     vars_ = item.get("vars") or item.get("columns") or []
     if vars_ == ["answer"] and len(rows) == 1:
-        return str(rows[0].get("answer", "")).strip()
-    return json.dumps(rows[0], ensure_ascii=False)[:500]
+        answer = str(rows[0].get("answer", "")).strip()
+        if answer and not _looks_like_raw_json(answer):
+            return answer
+    row0 = rows[0] if isinstance(rows[0], dict) else None
+    if row0:
+        metric = _summarize_metric_row(row0, question)
+        if metric:
+            return metric
+    nl = _narrative_from_data(question, [item])
+    if nl:
+        return nl
+    # Last resort: readable key/value prose, still not JSON braces.
+    if row0:
+        bits = [
+            f"{k.replace('_', ' ')} {v}"
+            for k, v in row0.items()
+            if v not in (None, "") and "wkt" not in str(k).lower()
+        ]
+        return "Result: " + "; ".join(bits[:8]) + "." if bits else ""
+    return ""
 
 
 def stream_chat_events(
@@ -1182,28 +1705,40 @@ def stream_chat_events(
     narrative: Optional[str] = None,
 ) -> Generator[str, None, None]:
     """SSE stream matching Zaha/Marie ./chat contract."""
+    from demos.twa_format import _looks_like_raw_json, _narrative_from_data
+
+    from demos.kg_row_narrative import is_weak_tool_summary
+
     text = (narrative or "").strip()
+    # Reject raw JSON / dict dumps that sometimes leak from the agent path.
+    if text and _looks_like_raw_json(text):
+        text = ""
+    if text and is_weak_tool_summary(text):
+        text = ""
     if not text:
-        snippets: List[str] = []
-        for item in data_items:
-            if item.get("type") == "table":
-                snippet = _extract_table_snippet(item)
-                if snippet:
-                    snippets.append(snippet)
-            elif item.get("type") == "map":
-                snippets.append(f"Map: {item.get('title') or 'geometry'}")
-        text = (
-            "\n\n".join(snippets)
-            if snippets
-            else "No tabular results were returned."
-        )
+        nl = _narrative_from_data(question, data_items)
+        if nl:
+            text = nl
+        else:
+            snippets: List[str] = []
+            for item in data_items:
+                if item.get("type") == "table":
+                    snippet = _extract_table_snippet(item, question)
+                    if snippet:
+                        snippets.append(snippet)
+                elif item.get("type") == "map":
+                    snippets.append(f"Map: {item.get('title') or 'geometry'}")
+            text = (
+                "\n\n".join(snippets)
+                if snippets
+                else "No tabular results were returned."
+            )
 
     started = time.perf_counter()
     # First chunk empty-ish then word stream (matches frontend trimStart behavior)
     for idx, token in enumerate(_tokenize_stream(text)):
         latency = round((time.perf_counter() - started) * 1000)
-        prefix = " " if idx else ""
-        payload = {"content": prefix + token, "latency": latency}
+        payload = {"content": token, "latency": latency}
         yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 

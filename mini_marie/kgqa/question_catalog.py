@@ -122,6 +122,67 @@ def _load_city_entries() -> List[CatalogEntry]:
                 kind="competency",
             )
         )
+    out.extend(_load_pirmasens_entries())
+    out.extend(_load_german_city_page_entries())
+    return out
+
+
+def _load_german_city_page_entries() -> List[CatalogEntry]:
+    """Zaha demo page questions (demos/german_city_competency_questions.json)."""
+    path = _repo_root() / "demos" / "german_city_competency_questions.json"
+    raw = _read_json(path) or {}
+    if not isinstance(raw, dict):
+        return []
+    out: List[CatalogEntry] = []
+    for city_key, block in raw.items():
+        if not isinstance(block, dict):
+            continue
+        for item in block.get("questions") or []:
+            if not isinstance(item, dict) or not item.get("id"):
+                continue
+            qid = str(item.get("id", ""))
+            question = str(item.get("question", "")).strip()
+            if not question:
+                continue
+            tags = ["competency", "city", "german_city", str(city_key)]
+            workflow_id = item.get("workflow")
+            out.append(
+                CatalogEntry(
+                    id=qid,
+                    question=question,
+                    domain=str(block.get("qa_domain") or "city"),
+                    mcp_servers=["twa-city"],
+                    workflow_id=str(workflow_id) if workflow_id else None,
+                    tags=tags,
+                    kind="competency",
+                )
+            )
+    return out
+
+
+def _load_pirmasens_entries() -> List[CatalogEntry]:
+    path = _repo_root() / "mini_marie" / "zaha" / "twa_city" / "competency_questions_pirmasens.json"
+    raw = _read_json(path) or {}
+    items = raw.get("questions", raw) if isinstance(raw, dict) else raw
+    if not isinstance(items, list):
+        items = []
+    out: List[CatalogEntry] = []
+    for item in items:
+        if not isinstance(item, dict) or not item.get("id"):
+            continue
+        tags = ["competency", "city", "pirmasens"] + list(item.get("tags") or [])
+        workflow_id = item.get("workflow_id")
+        out.append(
+            CatalogEntry(
+                id=str(item.get("id", "")),
+                question=str(item.get("question", "")),
+                domain=str(item.get("domain", "city")),
+                mcp_servers=list(item.get("mcp_servers") or ["twa-city"]),
+                workflow_id=str(workflow_id) if workflow_id else None,
+                tags=tags,
+                kind="competency",
+            )
+        )
     return out
 
 
@@ -218,44 +279,34 @@ def _load_marie_form_entries() -> List[CatalogEntry]:
 
 
 def _load_marie_mq_entries() -> List[CatalogEntry]:
-    """Marie demo questions without chemistry workflow JSON (routing hints only)."""
-    extras = [
-        (
-            "MQ37",
-            "Retrieve unit cell information of zeolitic material |Na20|[Al20Si76O192]",
-            "chemistry",
-            ["chemistry-ontozeolite"],
-        ),
-        (
-            "MQ49",
-            "Which MOPs have an outer diameter greater than 70 Angstrom?",
-            "mops",
-            ["twa-mops", "chemistry-ontomops"],
-        ),
-        (
-            "MQ50",
-            "What MOPs are based on the CBU [(C6H3)O(CH2)13CH3(CO2)2] and what are their inner sphere diameters?",
-            "mops",
-            ["twa-mops", "chemistry-ontomops"],
-        ),
-        (
-            "MQ54",
-            "What assembly models are representative of icosahedral geometry?",
-            "mops",
-            ["twa-mops", "chemistry-ontomops"],
-        ),
-    ]
-    return [
+    """Marie demo questions: remote MOP Blazegraph + zeolite routing hints."""
+    out: List[CatalogEntry] = [
         CatalogEntry(
-            id=eid,
-            question=q,
-            domain=domain,
-            mcp_servers=servers,
+            id="MQ37",
+            question="Retrieve unit cell information of zeolitic material |Na20|[Al20Si76O192]",
+            domain="chemistry",
+            mcp_servers=["chemistry-ontozeolite"],
             tags=["competency", "marie", "mq"],
             kind="competency",
-        )
-        for eid, q, domain, servers in extras
+        ),
     ]
+    try:
+        from demos.mop_specs import iter_mop_questions
+
+        for item in iter_mop_questions():
+            out.append(
+                CatalogEntry(
+                    id=str(item.get("id") or ""),
+                    question=str(item.get("question") or ""),
+                    domain="mops",
+                    mcp_servers=["twa-mops", "chemistry-ontomops"],
+                    tags=["competency", "marie", "mq", "remote_blazegraph"],
+                    kind="competency",
+                )
+            )
+    except ImportError:
+        pass
+    return out
 
 
 def _load_cross_kg_entries() -> List[CatalogEntry]:
@@ -299,7 +350,6 @@ def _load_cross_kg_entries() -> List[CatalogEntry]:
 
 def _example_questions() -> List[CatalogEntry]:
     examples = [
-        ("ex_mops_vmop17", "What is the synthesis route for VMOP-17?", "mops", ["twa-mops"], None),
         ("ex_mof_co2", "What is the average CO2 uptake for Tobassco MOFs?", "mof", ["mof-twa"], None),
         (
             "ex_city_bremen_14",
@@ -318,6 +368,27 @@ def _example_questions() -> List[CatalogEntry]:
         (
             "ex_city_kl",
             "What are the tallest buildings in Kaiserslautern?",
+            "city",
+            ["twa-city"],
+            None,
+        ),
+        (
+            "ex_city_pirmasens_height",
+            "What are the 10 tallest buildings in Pirmasens?",
+            "city",
+            ["twa-city"],
+            None,
+        ),
+        (
+            "ex_city_pirmasens_ubem",
+            "What is the average annual heat supply and CO2 savings from Pirmasens UBEM modelling?",
+            "city",
+            ["twa-city"],
+            None,
+        ),
+        (
+            "ex_city_pirmasens_14",
+            "14 tallest buildings in Pirmasens — where are they and what usage type?",
             "city",
             ["twa-city"],
             None,
@@ -422,6 +493,9 @@ def _load_marie_nl_questions() -> List[CatalogEntry]:
             continue
         mq_num = pending_mq
         pending_mq = None
+        if current_ns == "ontomops":
+            # Remote MOP Blazegraph competencies come from demos/mop_competency_questions.json
+            continue
         mcp = CHEMISTRY_NS_TO_MCP.get(current_ns, "chemistry-ontospecies")
         servers = [mcp]
         if current_ns == "ontomops":

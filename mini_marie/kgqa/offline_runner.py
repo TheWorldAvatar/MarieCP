@@ -135,7 +135,11 @@ def replay_offline(
             )
 
             wf = recorded.get("workflow_definition") or load_workflow(str(wf_id))
-            result = replay_competency_from_recording(recorded, wf)
+            from mini_marie.demo_runtime import demo_use_cache
+
+            result = replay_competency_from_recording(
+                recorded, wf, use_cache=demo_use_cache()
+            )
             result["replayed_from"] = str(path.resolve())
             offline_path = save_run(result)
         elif domain in ("mof_workflow", "city", "mops"):
@@ -155,7 +159,11 @@ def replay_offline(
                 )
 
                 wf = recorded.get("workflow_definition") or load_workflow(str(wf_id))
-                result = replay_competency_from_recording(recorded, wf)
+                from mini_marie.demo_runtime import demo_use_cache
+
+                result = replay_competency_from_recording(
+                    recorded, wf, use_cache=demo_use_cache()
+                )
                 offline_path = save_run(result)
                 domain = "mof_competency"
             elif recorded.get("workflow_name"):

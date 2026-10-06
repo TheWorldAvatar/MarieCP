@@ -1,0 +1,285 @@
+{
+  "bremen": {
+    "label": "Bremen",
+    "qa_domain": "city",
+    "questions": [
+      {
+        "id": "DE-BR-01",
+        "question": "14 tallest building in bremen and where are they? what kind of type",
+        "workflow": "city_ranked_buildings",
+        "parameters": {
+          "city": "bremen",
+          "top_n": 14,
+          "sort_field": "height",
+          "sort_order": "desc",
+          "include_locations": true
+        },
+        "map": true
+      },
+      {
+        "id": "DE-BR-02",
+        "question": "List the tallest non-domestic buildings in Bremen.",
+        "workflow": "city_ranked_buildings",
+        "parameters": {
+          "city": "bremen",
+          "top_n": 50,
+          "sort_field": "height",
+          "sort_order": "desc",
+          "usage_type": "Non-Domestic"
+        }
+      },
+      {
+        "id": "DE-BR-03",
+        "question": "Find the locations of the 10 highest buildings in Bremen",
+        "workflow": "city_ranked_buildings",
+        "parameters": {
+          "city": "bremen",
+          "top_n": 10,
+          "sort_field": "height",
+          "sort_order": "desc",
+          "include_locations": true
+        },
+        "map": true
+      }
+    ]
+  },
+  "kaiserslautern": {
+    "label": "Kaiserslautern",
+    "qa_domain": "city",
+    "questions": [
+      {
+        "id": "DE-KL-01",
+        "question": "What are the tallest buildings in Kaiserslautern?",
+        "workflow": "city_ranked_buildings",
+        "parameters": {
+          "city": "kaiserslautern",
+          "top_n": 10,
+          "sort_field": "height",
+          "sort_order": "desc"
+        }
+      },
+      {
+        "id": "DE-KL-02",
+        "question": "Find the locations of the 10 highest buildings in Kaiserslautern (2-step: rank then locate)",
+        "workflow": "city_ranked_buildings",
+        "parameters": {
+          "city": "kaiserslautern",
+          "top_n": 10,
+          "sort_field": "height",
+          "sort_order": "desc",
+          "include_locations": true
+        },
+        "map": true
+      }
+    ]
+  },
+  "pirmasens": {
+    "label": "Pirmasens",
+    "qa_domain": "city",
+    "questions": [
+      {
+        "id": "DE-PS-01",
+        "question": "How many CityGML buildings are in the Pirmasens TWA graph?"
+      },
+      {
+        "id": "DE-PS-02",
+        "question": "What is the minimum, maximum, and average measuredHeight for Pirmasens buildings?"
+      },
+      {
+        "id": "DE-PS-03",
+        "question": "What are the seven tallest buildings in Pirmasens?",
+        "workflow": "city_ranked_buildings",
+        "parameters": {
+          "city": "pirmasens",
+          "top_n": 7,
+          "sort_field": "height",
+          "sort_order": "desc"
+        }
+      },
+      {
+        "id": "DE-PS-04",
+        "question": "Eight tallest buildings in Pirmasens: where are they and what usage type does each have?",
+        "workflow": "city_ranked_buildings",
+        "parameters": {
+          "city": "pirmasens",
+          "top_n": 8,
+          "sort_field": "height",
+          "sort_order": "desc",
+          "include_locations": true
+        },
+        "map": true
+      },
+      {
+        "id": "DE-PS-05",
+        "question": "Which Pirmasens buildings are taller than 60 metres?",
+        "workflow": "city_ranked_buildings",
+        "parameters": {
+          "city": "pirmasens",
+          "sort_field": "height",
+          "sort_order": "desc",
+          "min_height_m": 60
+        }
+      },
+      {
+        "id": "DE-PS-06",
+        "question": "What is the min, max, and average annual heat supply (kWh/m²) from Pirmasens thermal collector UBEM?"
+      },
+      {
+        "id": "DE-PS-07",
+        "question": "Which five Pirmasens DABGEO buildings have the highest annual heat supply from thermal collectors?",
+        "workflow": "pirmasens_ubem_ranked",
+        "parameters": {
+          "city": "pirmasens",
+          "top_n": 5,
+          "sort_field": "heat_kwh_per_m2",
+          "sort_order": "desc"
+        }
+      },
+      {
+        "id": "DE-PS-08",
+        "question": "Which six Pirmasens buildings have the highest modelled CO2 savings from solar collectors?",
+        "workflow": "pirmasens_ubem_co2_ranked",
+        "parameters": {
+          "city": "pirmasens",
+          "top_n": 6,
+          "sort_field": "co2_savings",
+          "sort_order": "desc"
+        }
+      },
+      {
+        "id": "DE-PS-09",
+        "question": "How many DABGEO/OEMA buildings and UBEM devices are in the Pirmasens graph?"
+      },
+      {
+        "id": "DE-PS-10",
+        "question": "Summarize the Pirmasens data layers with live counts from the endpoint (CityGML, DABGEO/OEMA, UBEM)."
+      },
+      {
+        "id": "DE-PS-11",
+        "question": "What is the average annual heat supply and CO2 savings from Pirmasens UBEM modelling?"
+      },
+      {
+        "id": "DE-PS-12",
+        "question": "What are the 10 tallest buildings in Pirmasens?",
+        "workflow": "city_ranked_buildings",
+        "parameters": {
+          "city": "pirmasens",
+          "top_n": 10,
+          "sort_field": "height",
+          "sort_order": "desc"
+        }
+      },
+      {
+        "id": "DE-PS-13",
+        "question": "Show a map of the tallest Pirmasens building footprints.",
+        "workflow": "city_ranked_buildings",
+        "parameters": {
+          "city": "pirmasens",
+          "top_n": 12,
+          "sort_field": "height",
+          "sort_order": "desc",
+          "include_locations": true
+        },
+        "map": true
+      }
+    ]
+  },
+  "pirmasens_toilets": {
+    "label": "Pirmasens — Public Toilets",
+    "qa_domain": "city",
+    "questions": [
+      {
+        "id": "DE-PT-01",
+        "question": "What public toilets are available in the Pirmasens knowledge graph?"
+      },
+      {
+        "id": "DE-PT-02",
+        "question": "What is the location (geometry) of each public toilet in Pirmasens?"
+      },
+      {
+        "id": "DE-PT-03",
+        "question": "Which public toilets in Pirmasens are wheelchair accessible?"
+      },
+      {
+        "id": "DE-PT-04",
+        "question": "Which public toilets in Pirmasens are free to use?"
+      },
+      {
+        "id": "DE-PT-05",
+        "question": "Which public toilets in Pirmasens are not wheelchair accessible?"
+      }
+    ]
+  },
+  "pirmasens_plots": {
+    "label": "Pirmasens — Plots & Zoning",
+    "qa_domain": "city",
+    "questions": [
+      {
+        "id": "DE-PL-01",
+        "question": "What plots are available in the Pirmasens knowledge graph?"
+      },
+      {
+        "id": "DE-PL-02",
+        "question": "Which zone does each Pirmasens plot belong to?"
+      },
+      {
+        "id": "DE-PL-03",
+        "question": "What is the area of each plot in Pirmasens?"
+      },
+      {
+        "id": "DE-PL-04",
+        "question": "What is the maximum permitted building height for each Pirmasens plot?"
+      },
+      {
+        "id": "DE-PL-05",
+        "question": "Which Pirmasens plots belong to the Automeile zoning category?"
+      },
+      {
+        "id": "DE-PL-06",
+        "question": "Which Pirmasens plots allow a site coverage greater than 0.6?"
+      },
+      {
+        "id": "DE-PL-07",
+        "question": "What is the geometry (WKT) of each plot in Pirmasens?"
+      },
+      {
+        "id": "DE-PL-08",
+        "question": "What is the maximum permitted site coverage (GRZ) for each Pirmasens plot?"
+      },
+      {
+        "id": "DE-PL-09",
+        "question": "What is the permitted building mass ratio (BMZ) for each Pirmasens plot?"
+      },
+      {
+        "id": "DE-PL-10",
+        "question": "What is the maximum permitted height above normal null (OK) for each Pirmasens plot?"
+      },
+      {
+        "id": "DE-PL-11",
+        "question": "What zoning type is associated with each zone in Pirmasens?"
+      }
+    ]
+  },
+  "pirmasens_solarthermie": {
+    "label": "Pirmasens — Solarthermie",
+    "qa_domain": "city",
+    "questions": [
+      {
+        "id": "DE-ST-01",
+        "question": "Which Pirmasens buildings have solar thermal collectors installed?"
+      },
+      {
+        "id": "DE-ST-02",
+        "question": "What is the annual heat supply of plate thermal collectors for each Pirmasens building?"
+      },
+      {
+        "id": "DE-ST-03",
+        "question": "What is the annual heat supply of tube thermal collectors in Pirmasens?"
+      },
+      {
+        "id": "DE-ST-04",
+        "question": "Which Pirmasens buildings achieve annual CO2 savings greater than 50 kg/m²?"
+      }
+    ]
+  }
+}

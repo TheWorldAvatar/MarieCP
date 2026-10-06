@@ -284,10 +284,57 @@ def register_competency_tools(mcp: FastMCP, namespace: str) -> None:
             return cq.search_authors(query, limit=limit)
 
     if namespace == "ontomops":
+        from mini_marie.mop_mof.mops import remote_mcp as mop_remote
 
         @mcp.tool(
             name="ontomops_instance_routing",
-            description="Explain where MOP instance data lives (twa-mops / mof-twa MCPs)",
+            description="Explain OntoMOPs backends: remote Blazegraph vs local synthesis TWA vs MOF corpus",
         )
         def ontomops_instance_routing() -> str:
             return cq.ontomops_instance_note()
+
+        @mcp.tool(
+            name="get_mop_blazegraph_endpoint_status",
+            description="Probe/cache OntoMOPs Blazegraph (ontomops_ogm) endpoints",
+        )
+        def get_mop_blazegraph_endpoint_status(force_probe: bool = False) -> str:
+            return mop_remote.get_mop_blazegraph_endpoint_status(force_probe=force_probe)
+
+        @mcp.tool(
+            name="get_mops_by_outer_diameter_min",
+            description="Remote MOP corpus: outer diameter > min_angstrom (uses cache if endpoint down)",
+        )
+        def get_mops_by_outer_diameter_min(min_angstrom: float, limit: int = 5) -> str:
+            return mop_remote.get_mops_by_outer_diameter_min(min_angstrom, limit=min(limit, 5))
+
+        @mcp.tool(
+            name="get_mops_by_cbu_formula",
+            description="Remote MOP corpus: MOPs for exact CBU formula + inner sphere diameters",
+        )
+        def get_mops_by_cbu_formula(cbu_formula: str, limit: int = 5) -> str:
+            return mop_remote.get_mops_by_cbu_formula(cbu_formula, limit=min(limit, 5))
+
+        @mcp.tool(
+            name="get_assembly_models_by_polyhedral_shape",
+            description="Remote MOP corpus: assembly models by polyhedral shape symbol",
+        )
+        def get_assembly_models_by_polyhedral_shape(shape_symbol: str, limit: int = 5) -> str:
+            return mop_remote.get_assembly_models_by_polyhedral_shape(shape_symbol, limit=min(limit, 5))
+
+        @mcp.tool(name="get_mop_corpus_statistics", description="Remote MOP/CBU/CCDC counts from Blazegraph")
+        def get_mop_corpus_statistics(force_probe: bool = False) -> str:
+            return mop_remote.get_mop_corpus_statistics(force_probe=force_probe)
+
+        @mcp.tool(name="get_mop_with_largest_pore_diameter", description="Remote: MOP with largest pore diameter (MQ51)")
+        def get_mop_with_largest_pore_diameter(limit: int = 1) -> str:
+            return mop_remote.get_mop_with_largest_pore_diameter(limit=min(limit, 5))
+
+        @mcp.tool(name="get_mops_by_reference_doi", description="Remote: MOPs linked to a reference DOI (MQ56)")
+        def get_mops_by_reference_doi(doi: str, limit: int = 5) -> str:
+            return mop_remote.get_mops_by_reference_doi(doi, limit=min(limit, 5))
+
+        @mcp.tool(name="get_cbus_as_linear_generic_building_units", description="Remote: CBUs as 2-linear GBU type (MQ57)")
+        def get_cbus_as_linear_generic_building_units(label_fragment: str = "2-linear", limit: int = 5) -> str:
+            return mop_remote.get_cbus_as_linear_generic_building_units(
+                label_fragment=label_fragment, limit=min(limit, 5)
+            )
